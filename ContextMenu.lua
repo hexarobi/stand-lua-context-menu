@@ -1,8 +1,8 @@
--- Context Menu
+-- Context Menu Manager
 -- by Hexarobi
 -- with code from Wiri
 
-local SCRIPT_VERSION = "0.2"
+local SCRIPT_VERSION = "0.3"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -44,89 +44,78 @@ if auto_updater == true then
 end
 
 
+--- Context Menu Manager
+local cmm = {
+    menu_options = {},
+}
+local menus = {}
+
 util.require_natives("3095a")
+
+util.ensure_package_is_installed('lua/inspect')
+local inspect = require("inspect")
 
 local config = {
     color = {
         options_circle={r=1, g=1, b=1, a=0.1},
         option_text={r=1, g=1, b=1, a=1},
+        help_text={r=0.8, g=0.8, b=0.8, a=1},
         option_wedge={r=1, g=1, b=1, a=0.3},
         selected_option_wedge={r=1, g=0.5, b=0.5, a=0.5},
         target_bounding_box={r=255,g=0,b=0,a=255},
         crosshair={r=1, g=1, b=1, a=0.5},
     },
-    menu_radius=0.2,
+    selection_distance=1000.0,
+    menu_radius=0.1,
     option_label_distance=0.6,
     option_wedge_deadzone=0.15,
     option_wedge_padding=0.9,
+
+    menu_options_scripts_dir="lib/ContextMenus",
 }
 
-local options = {
-    {
-        name="Delete",
-        help="Removes the selected object",
-        execute=function(target)
-            util.toast("Deleting object "..target.name)
-            entities.delete(target.handle)
+local CONTEXT_MENUS_DIR = filesystem.scripts_dir()..config.menu_options_scripts_dir
+filesystem.mkdirs(CONTEXT_MENUS_DIR)
+
+local function debug_log(text)
+    util.log("[ContextMenuManager] "..text)
+end
+
+local function is_in(needle, list)
+    for _, item in pairs(list) do if item == needle then return true end end
+    return false
+end
+
+cmm.add_context_menu_option = function(menu_option)
+    cmm.default_menu_option(menu_option)
+    debug_log("Adding menu option "..menu_option.name or "Unknown")
+    table.insert(cmm.menu_options, menu_option)
+end
+
+cmm.default_menu_option = function(menu_option)
+    if menu_option.enabled == nil then menu_option.enabled = true end
+end
+
+cmm.refresh_menu_options_from_files = function(directory, path)
+    if path == nil then path = "" end
+    for _, filepath in ipairs(filesystem.list_files(directory)) do
+        if filesystem.is_dir(filepath) then
+            local _2, dirname = string.match(filepath, "(.-)([^\\/]-%.?)$")
+            cmm.refresh_menu_options_from_files(filepath, path.."/"..dirname)
+        else
+            local _3, filename, ext = string.match(filepath, "(.-)([^\\/]-%.?)[.]([^%.\\/]*)$")
+            if ext == "lua" or ext == "pluto" then
+                local menu_option = require(config.menu_options_scripts_dir..path.."/"..filename)
+                menu_option.filename = filename.."."..ext
+                --debug_log("Loading menu option "..config.menu_options_scripts_dir..path.."/"..filename..": "..inspect(menu_option))
+                --cc.expand_chat_command_defaults(command, filename, path)
+                cmm.add_context_menu_option(menu_option)
+            end
         end
-    },
-    --{
-    --    name="Move",
-    --    help="Allows for moving the selected object",
-    --    execute=function(target)
-    --        util.toast("Moving object "..target.name)
-    --        -- TODO
-    --    end
-    --},
-    --{
-    --    name="Freeze",
-    --    help="Freeze the selected vehicle in its current position",
-    --    only_for_type="VEHICLE",
-    --    execute=function(target)
-    --        util.toast("Freezing position of "..target.name)
-    --        ENTITY.FREEZE_ENTITY_POSITION(target.handle, true)
-    --    end
-    --},
-    {
-        name="Right Side Up",
-        help="Turn vehicle right side up",
-        only_for_type="VEHICLE",
-        execute=function(target)
-            util.toast("Flipping "..target.name.." right-side up")
-            local rotation = ENTITY.GET_ENTITY_ROTATION(target.handle, 2)
-            ENTITY.SET_ENTITY_ROTATION(target.handle, rotation.x, 0.0, rotation.z, 2, true)
-        end
-    },
-    {
-        name="Upside Down",
-        help="Turn vehicle right side up",
-        only_for_type="VEHICLE",
-        execute=function(target)
-            util.toast("Flipping "..target.name.." upside down")
-            local rotation = ENTITY.GET_ENTITY_ROTATION(target.handle, 2)
-            ENTITY.SET_ENTITY_ROTATION(target.handle, rotation.x, 180.0, rotation.z, 2, true)
-        end
-    },
-    {
-        name="Explode",
-        help="Explodes the selected vehicle",
-        only_for_type="VEHICLE",
-        execute=function(target)
-            util.toast("Exploding vehicle "..target.name)
-            VEHICLE.EXPLODE_VEHICLE(target.handle, true, false)
-        end
-    },
-    {
-        name="Drive",
-        help="Attempt to drive the selected vehicle",
-        only_for_type="VEHICLE",
-        execute=function(target)
-            util.toast("Driving "..target.name)
-            PED.SET_PED_INTO_VEHICLE(PLAYER.PLAYER_PED_ID(), target.handle, -2)
-            --entities.delete(target.handle)
-        end
-    },
-}
+    end
+end
+
+cmm.refresh_menu_options_from_files(CONTEXT_MENUS_DIR)
 
 local context_menu = {}
 local current_target = {}
@@ -247,6 +236,12 @@ context_menu.draw_text_with_shadow = function(posx, posy, text, alignment, scale
     directx.draw_text(posx - shadow_distance, posy - shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
     directx.draw_text(posx + shadow_distance, posy - shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
     directx.draw_text(posx - shadow_distance, posy + shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+
+    directx.draw_text(posx + shadow_distance, posy, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx, posy + shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx - shadow_distance, posy, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx, posy - shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+
     directx.draw_text(posx, posy, text, alignment, scale, color, force_in_bounds)
 end
 
@@ -313,10 +308,6 @@ local function get_raycast_result(dist, flag)
     return result
 end
 
----
----
----
-
 local function is_point_in_polygon( x, y, ...)
     local vertices = {...}
     local points= {}
@@ -324,7 +315,7 @@ local function is_point_in_polygon( x, y, ...)
     for i=1, #vertices-1, 2 do
         points[#points+1] = { x=vertices[i], y=vertices[i+1] }
     end
-    local i, j = #points, #points
+    local j = #points, #points
     local inside = false
 
     for i=1, #points do
@@ -338,6 +329,10 @@ local function is_point_in_polygon( x, y, ...)
 
     return inside
 end
+
+---
+--- Context Menu
+---
 
 local is_menu_open = false
 local pointx = memory.alloc()
@@ -358,8 +353,9 @@ context_menu.draw_options_menu = function(target, trigger_option)
     }
     local radius = config.menu_radius
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, radius, config.color.options_circle)
-    directx.draw_text(target.menu_pos.x, target.menu_pos.y, target.name, 5, 0.5, config.color.option_text, true)
+    context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
 
+    -- Split circle up into n slices of width `option_width` degrees
     local option_width = 360 / #target.relevant_options
     for option_index, option in target.relevant_options do
         if option.name ~= nil then
@@ -367,7 +363,6 @@ context_menu.draw_options_menu = function(target, trigger_option)
             local option_text_angle = ((option_index-1) * option_width) - 90
             local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_text_angle)
             context_menu.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
-            --directx.draw_text(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
 
             local option_center_line = get_circle_coords(target.menu_pos, radius, option_text_angle)
             local option_start_angle = option_text_angle - (option_width / 2 * config.option_wedge_padding)
@@ -391,7 +386,7 @@ context_menu.draw_options_menu = function(target, trigger_option)
                 draw_color = config.color.selected_option_wedge
             end
 
-            -- Draw polygon by drawing multiple triangles
+            -- Draw wedge polygon by drawing multiple triangles
             directx.draw_triangle(
                 option_start_coords_close.x, option_start_coords_close.y,
                 option_start_coords.x, option_start_coords.y,
@@ -411,9 +406,14 @@ context_menu.draw_options_menu = function(target, trigger_option)
                 draw_color
             )
 
+            if is_selected then
+                context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9), option.help, 5, 0.5, config.color.help_text, true)
+            end
+
+
             if trigger_option and is_selected then
                 if option.execute ~= nil and type(option.execute) == "function" then
-                    util.toast("Triggering option "..option.name)
+                    util.log("Triggering option "..option.name)
                     option.execute(target)
                 end
             end
@@ -422,10 +422,20 @@ context_menu.draw_options_menu = function(target, trigger_option)
 
 end
 
+local function is_menu_option_relevant(menu_option, target)
+    if menu_option.enabled == false then
+        return false
+    end
+    if menu_option.applicable_to ~= nil and not is_in(target.type, menu_option.applicable_to) then
+        return false
+    end
+    return true
+end
+
 context_menu.get_relevant_options = function(target)
     local relevant_options = {}
-    for option_index, option in options do
-        if option.only_for_type == nil or option.only_for_type == target.type then
+    for _, option in cmm.menu_options do
+        if is_menu_option_relevant(option, target) then
             table.insert(relevant_options, option)
         end
     end
@@ -444,31 +454,39 @@ context_menu.build_target = function(handle)
         new_target.name = VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash)
     end
     new_target.relevant_options = context_menu.get_relevant_options(new_target)
+    new_target.screen_pos = {
+        x=0.5, y=0.5,
+    }
+    new_target.offset = {x=0, y=0}
     return new_target
 end
 
-menu.my_root():toggle_loop("Context Menu", {}, "", function(value)
+context_menu.get_raycast_target = function()
+    local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
+    local raycastResult = get_raycast_result(config.selection_distance, flag)
+    if raycastResult.didHit and ENTITY.DOES_ENTITY_EXIST(raycastResult.hitEntity) then
+        return context_menu.build_target(raycastResult.hitEntity)
+    end
+end
+
+menu.my_root():toggle_loop("Context Menu", {}, "Enable right-click on in-game objects for context menu.", function(value)
     directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
     if not is_menu_open then
-        local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
-        local raycastResult = get_raycast_result(500.0, flag)
-        if raycastResult.didHit and ENTITY.DOES_ENTITY_EXIST(raycastResult.hitEntity) then
-            current_target = context_menu.build_target(raycastResult.hitEntity)
-        else
-            current_target = nil
-        end
+        current_target = context_menu.get_raycast_target()
     end
     if current_target ~= nil then
-        local player_screen_pos = {x=0, y=0}
-        local myPos = players.get_position(players.user())
-        if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(myPos.x, myPos.y, myPos.z, pointx, pointy) then
-            player_screen_pos = {x=memory.read_float(pointx), y=memory.read_float(pointy)}
-        end
-        current_target.screen_pos = { x=0, y=0}
-        current_target.pos = ENTITY.GET_ENTITY_COORDS(current_target.handle, true)
-        if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(current_target.pos.x, current_target.pos.y, current_target.pos.z, pointx, pointy) then
-            current_target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
-        end
+        --if not is_menu_open then
+            local player_screen_pos = {x=0, y=0}
+            local myPos = players.get_position(players.user())
+            if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(myPos.x, myPos.y, myPos.z, pointx, pointy) then
+                player_screen_pos = {x=memory.read_float(pointx), y=memory.read_float(pointy)}
+            end
+            current_target.screen_pos = { x=0, y=0}
+            current_target.pos = ENTITY.GET_ENTITY_COORDS(current_target.handle, true)
+            if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(current_target.pos.x, current_target.pos.y, current_target.pos.z, pointx, pointy) then
+                current_target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
+            end
+        --end
         if current_target.screen_pos.x > 0 and current_target.screen_pos.y > 0 then
             context_menu.draw_bounding_box(current_target.handle, config.color.target_bounding_box)
             PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
@@ -490,6 +508,25 @@ menu.my_root():toggle_loop("Context Menu", {}, "", function(value)
         end
     end
 end)
+
+menus.menu_options = menu.my_root():list("Menu Options", {}, "Enable or disable specific context menu options.")
+menus.menu_options:action("Open ContextMenus Folder", {}, "Add ContextMenu scripts to this folder", function()
+    util.open_folder(CONTEXT_MENUS_DIR)
+end)
+
+local function build_menu_option_description(menu_option)
+    local text = menu_option.help or ""
+    if menu_option.author then text = text.."\nAuthor: "..menu_option.author end
+    if menu_option.filename then text = text.."\nFilename: "..menu_option.filename end
+    return text
+end
+
+menus.menu_options:divider("Menu Options")
+for _, menu_option in cmm.menu_options do
+    menus.menu_options:toggle(menu_option.name, {}, build_menu_option_description(menu_option), function(value)
+        menu_option.enabled = value
+    end, menu_option.enabled)
+end
 
 ---
 --- About Menu
