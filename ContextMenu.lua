@@ -8,9 +8,40 @@ local config = {
     color = {
         options_circle={r=1, g=1, b=1, a=0.1},
         option_text={r=1, g=1, b=1, a=1},
-        option_wedge={r=1, g=0.5, b=0.5, a=0.3},
+        option_wedge={r=1, g=1, b=1, a=0.3},
+        selected_option_wedge={r=1, g=0.5, b=0.5, a=0.5},
         target_bounding_box={r=255,g=0,b=0,a=255},
         crosshair={r=1, g=1, b=1, a=0.5},
+    },
+    menu_radius=0.2,
+    option_label_distance=0.6,
+    option_wedge_deadzone=0.2,
+}
+
+local options = {
+    {
+        name="Option #1",
+    },
+    {
+        name="Option #2",
+    },
+    {
+        name="Option #3",
+    },
+    {
+        name="Option #4",
+    },
+    {
+        name="Option #5",
+    },
+    {
+        name="Option #6",
+    },
+    {
+        name="Option #7",
+    },
+    {
+        name="Option #8",
     }
 }
 
@@ -186,75 +217,100 @@ end
 ---
 ---
 
+local function is_point_in_polygon( x, y, ...)
+    local vertices = {...}
+    local points= {}
+
+    for i=1, #vertices-1, 2 do
+        points[#points+1] = { x=vertices[i], y=vertices[i+1] }
+    end
+    local i, j = #points, #points
+    local inside = false
+
+    for i=1, #points do
+        if ((points[i].y < y and points[j].y>=y or points[j].y< y and points[i].y>=y) and (points[i].x<=x or points[j].x<=x)) then
+            if (points[i].x+(y-points[i].y)/(points[j].y-points[i].y)*(points[j].x-points[i].x)<x) then
+                inside = not inside
+            end
+        end
+        j = i
+    end
+
+    return inside
+end
+
 local target = {}
 local isMenuOpen = false
 local pointx = memory.alloc()
 local pointy = memory.alloc()
 
-local options = {
-    {
-        name="Option #1",
-    },
-    {
-        name="Option #2",
-    },
-    {
-        name="Option #3",
-    },
-    {
-        name="Option #4",
-    },
-    {
-        name="Option #5",
-    },
-    {
-        name="Option #6",
-    },
-    {
-        name="Option #7",
-    },
-    {
-        name="Option #8",
-    }
-}
-
 local function get_circle_coords(origin, radius, angle_degree)
     local angle_radian = math.rad(angle_degree)
     return {
-        x=(radius) * math.cos(angle_radian) + origin.x,
-        y=(radius) * math.sin(angle_radian) + origin.y
+        x=(radius * math.cos(angle_radian) * 0.9) + origin.x,
+        y=(radius * math.sin(angle_radian) * 1.6) + origin.y
     }
 end
 
-atest.draw_options_menu = function(target)
-    local radius = 0.2
-    directx.draw_circle(target.screen_pos.x, target.screen_pos.y, radius, config.color.options_circle)
+atest.draw_options_menu = function(target, trigger_option)
+    target.menu_pos = {
+        x=target.screen_pos.x - target.offset.x,
+        y=target.screen_pos.y - target.offset.y,
+    }
+    local radius = config.menu_radius
+    directx.draw_circle(target.menu_pos.x, target.menu_pos.y, radius, config.color.options_circle)
     local text = util.reverse_joaat(ENTITY.GET_ENTITY_MODEL(target.handle))
-    directx.draw_text(target.screen_pos.x, target.screen_pos.y, text, 5, 0.5, config.color.option_text, true)
+    directx.draw_text(target.menu_pos.x, target.menu_pos.y, text, 5, 0.5, config.color.option_text, true)
 
     local option_width = 360 / #options
     for option_index, option in options do
 
-        local option_text_angle = (option_index-1) * option_width
-        local option_text_coords = get_circle_coords(target.screen_pos, radius, option_text_angle)
+        local option_text_angle = ((option_index-1) * option_width) - 90
+        local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_text_angle)
         directx.draw_text(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
 
         local option_start_angle = option_text_angle - (option_width/2.1)
-        local option_start_coords = get_circle_coords(target.screen_pos, radius, option_start_angle)
+        local option_start_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_start_angle)
+        local option_start_coords = get_circle_coords(target.menu_pos, radius, option_start_angle)
         local option_end_angle = option_text_angle + (option_width/2.1)
-        local option_end_coords = get_circle_coords(target.screen_pos, radius, option_end_angle)
+        local option_end_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_end_angle)
+        local option_end_coords = get_circle_coords(target.menu_pos, radius, option_end_angle)
 
-        directx.draw_triangle(
-            target.screen_pos.x, target.screen_pos.y,
+        local is_selected = is_point_in_polygon(
+            0.5, 0.5,
+            option_start_coords_close.x, option_start_coords_close.y,
             option_start_coords.x, option_start_coords.y,
             option_end_coords.x, option_end_coords.y,
-            config.color.option_wedge
+            option_end_coords_close.x, option_end_coords_close.y
         )
+
+        local draw_color = config.color.option_wedge
+        if is_selected then
+            draw_color = config.color.selected_option_wedge
+        end
+
+        -- Draw polygon by drawing two triangles
+        directx.draw_triangle(
+            option_start_coords_close.x, option_start_coords_close.y,
+            option_start_coords.x, option_start_coords.y,
+            option_end_coords.x, option_end_coords.y,
+            draw_color
+        )
+        directx.draw_triangle(
+            option_start_coords_close.x, option_start_coords_close.y,
+            option_end_coords_close.x, option_end_coords_close.y,
+            option_end_coords.x, option_end_coords.y,
+            draw_color
+        )
+
+        if trigger_option and is_selected then
+            util.toast("Triggering option "..option_index)
+        end
     end
 
 end
 
-menu.my_root():toggle_loop("Crosshair", {}, "", function(value)
+menu.my_root():toggle_loop("Context Menu", {}, "", function(value)
     directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
     if not isMenuOpen then
         local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
@@ -284,10 +340,18 @@ menu.my_root():toggle_loop("Crosshair", {}, "", function(value)
             PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
             PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
             if PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
+                if not isMenuOpen then
+                    target.offset = {
+                        x=target.screen_pos.x - 0.5,
+                        y=target.screen_pos.y - 0.5,
+                    }
+                end
                 isMenuOpen = true
-                CAM.POINT_CAM_AT_ENTITY(CAM.GET_RENDERING_CAM(), target.handle, 0, 0, 0, true)
-                atest.draw_options_menu(target)
+                atest.draw_options_menu(target, false)
             else
+                if isMenuOpen then
+                    atest.draw_options_menu(target, true)
+                end
                 isMenuOpen = false
             end
 
