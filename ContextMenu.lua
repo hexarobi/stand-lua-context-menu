@@ -2,6 +2,48 @@
 -- by Hexarobi
 -- with code from Wiri
 
+local SCRIPT_VERSION = "0.2"
+
+-- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
+local status, auto_updater = pcall(require, "auto-updater")
+if not status then
+    if not async_http.have_access() then
+        util.toast("Failed to install auto-updater. Internet access is disabled. To enable automatic updates, please stop the script then uncheck the `Disable Internet Access` option.")
+    else
+        local auto_update_complete = nil util.toast("Installing auto-updater...", TOAST_ALL)
+        async_http.init("raw.githubusercontent.com", "/hexarobi/stand-lua-auto-updater/main/auto-updater.lua",
+                function(raw_result, raw_headers, raw_status_code)
+                    local function parse_auto_update_result(result, headers, status_code)
+                        local error_prefix = "Error downloading auto-updater: "
+                        if status_code ~= 200 then util.toast(error_prefix..status_code, TOAST_ALL) return false end
+                        if not result or result == "" then util.toast(error_prefix.."Found empty file.", TOAST_ALL) return false end
+                        filesystem.mkdir(filesystem.scripts_dir() .. "lib")
+                        local file = io.open(filesystem.scripts_dir() .. "lib\\auto-updater.lua", "wb")
+                        if file == nil then util.toast(error_prefix.."Could not open file for writing.", TOAST_ALL) return false end
+                        file:write(result) file:close() util.toast("Successfully installed auto-updater lib", TOAST_ALL) return true
+                    end
+                    auto_update_complete = parse_auto_update_result(raw_result, raw_headers, raw_status_code)
+                end, function() util.toast("Error downloading auto-updater lib. Update failed to download.", TOAST_ALL) end)
+        async_http.dispatch() local i = 1 while (auto_update_complete == nil and i < 40) do util.yield(250) i = i + 1 end
+        if auto_update_complete == nil then error("Error downloading auto-updater lib. HTTP Request timeout") end
+        auto_updater = require("auto-updater")
+    end
+end
+if auto_updater == true then error("Invalid auto-updater lib. Please delete your Stand/Lua Scripts/lib/auto-updater.lua and try again") end
+
+---
+--- Auto Updater
+---
+
+local auto_update_config = {
+    source_url="https://raw.githubusercontent.com/hexarobi/stand-lua-context-menu/main/ContextMenu.lua",
+    script_relpath=SCRIPT_RELPATH,
+}
+if auto_updater == true then
+    auto_updater.run_auto_update(auto_update_config)
+end
+
+
 util.require_natives("3095a")
 
 local config = {
@@ -15,37 +57,81 @@ local config = {
     },
     menu_radius=0.2,
     option_label_distance=0.6,
-    option_wedge_deadzone=0.2,
+    option_wedge_deadzone=0.15,
+    option_wedge_padding=0.9,
 }
 
 local options = {
     {
-        name="Option #1",
+        name="Delete",
+        help="Removes the selected object",
+        execute=function(target)
+            util.toast("Deleting object "..target.name)
+            entities.delete(target.handle)
+        end
+    },
+    --{
+    --    name="Move",
+    --    help="Allows for moving the selected object",
+    --    execute=function(target)
+    --        util.toast("Moving object "..target.name)
+    --        -- TODO
+    --    end
+    --},
+    --{
+    --    name="Freeze",
+    --    help="Freeze the selected vehicle in its current position",
+    --    only_for_type="VEHICLE",
+    --    execute=function(target)
+    --        util.toast("Freezing position of "..target.name)
+    --        ENTITY.FREEZE_ENTITY_POSITION(target.handle, true)
+    --    end
+    --},
+    {
+        name="Right Side Up",
+        help="Turn vehicle right side up",
+        only_for_type="VEHICLE",
+        execute=function(target)
+            util.toast("Flipping "..target.name.." right-side up")
+            local rotation = ENTITY.GET_ENTITY_ROTATION(target.handle, 2)
+            ENTITY.SET_ENTITY_ROTATION(target.handle, rotation.x, 0.0, rotation.z, 2, true)
+        end
     },
     {
-        name="Option #2",
+        name="Upside Down",
+        help="Turn vehicle right side up",
+        only_for_type="VEHICLE",
+        execute=function(target)
+            util.toast("Flipping "..target.name.." upside down")
+            local rotation = ENTITY.GET_ENTITY_ROTATION(target.handle, 2)
+            ENTITY.SET_ENTITY_ROTATION(target.handle, rotation.x, 180.0, rotation.z, 2, true)
+        end
     },
     {
-        name="Option #3",
+        name="Explode",
+        help="Explodes the selected vehicle",
+        only_for_type="VEHICLE",
+        execute=function(target)
+            util.toast("Exploding vehicle "..target.name)
+            VEHICLE.EXPLODE_VEHICLE(target.handle, true, false)
+        end
     },
     {
-        name="Option #4",
+        name="Drive",
+        help="Attempt to drive the selected vehicle",
+        only_for_type="VEHICLE",
+        execute=function(target)
+            util.toast("Driving "..target.name)
+            PED.SET_PED_INTO_VEHICLE(PLAYER.PLAYER_PED_ID(), target.handle, -2)
+            --entities.delete(target.handle)
+        end
     },
-    {
-        name="Option #5",
-    },
-    {
-        name="Option #6",
-    },
-    {
-        name="Option #7",
-    },
-    {
-        name="Option #8",
-    }
 }
 
-local atest = {}
+local context_menu = {}
+local current_target = {}
+
+local ENTITY_TYPES = {"PED", "VEHICLE", "OBJECT"}
 
 ---
 --- Draw Utils
@@ -59,7 +145,7 @@ local forwardVector_pointer = memory.alloc()
 local position_pointer = memory.alloc()
 
 -- From GridSpawn
-atest.draw_bounding_box = function(entity, colour)
+context_menu.draw_bounding_box = function(entity, colour)
     if colour == nil then
         colour = {r=255,g=0,b=0,a=255}
     end
@@ -67,10 +153,10 @@ atest.draw_bounding_box = function(entity, colour)
     MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), minimum, maximum)
     local minimum_vec = v3.new(minimum)
     local maximum_vec = v3.new(maximum)
-    atest.draw_bounding_box_with_dimensions(entity, colour, minimum_vec, maximum_vec)
+    context_menu.draw_bounding_box_with_dimensions(entity, colour, minimum_vec, maximum_vec)
 end
 
-atest.draw_bounding_box_with_dimensions = function(entity, colour, minimum_vec, maximum_vec)
+context_menu.draw_bounding_box_with_dimensions = function(entity, colour, minimum_vec, maximum_vec)
 
     local dimensions = {x = maximum_vec.y - minimum_vec.y, y = maximum_vec.x - minimum_vec.x, z = maximum_vec.z - minimum_vec.z}
 
@@ -148,6 +234,20 @@ atest.draw_bounding_box_with_dimensions = function(entity, colour, minimum_vec, 
             bottom_right.x, bottom_right.y, bottom_right.z,
             colour.r, colour.g, colour.b, colour.a
     )
+end
+
+context_menu.draw_text_with_shadow = function(posx, posy, text, alignment, scale, color, force_in_bounds)
+    if alignment == nil then alignment = 5 end
+    if scale == nil then scale = 0.5 end
+    if color == nil then color = config.color.option_text end
+    if force_in_bounds == nil then force_in_bounds = true end
+    local shadow_color = {r=0,g=0,b=0,a=0.3}
+    local shadow_distance = 0.001
+    directx.draw_text(posx + shadow_distance, posy + shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx - shadow_distance, posy - shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx + shadow_distance, posy - shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx - shadow_distance, posy + shadow_distance, text, alignment, scale, shadow_color, force_in_bounds)
+    directx.draw_text(posx, posy, text, alignment, scale, color, force_in_bounds)
 end
 
 --------------------------
@@ -239,8 +339,7 @@ local function is_point_in_polygon( x, y, ...)
     return inside
 end
 
-local target = {}
-local isMenuOpen = false
+local is_menu_open = false
 local pointx = memory.alloc()
 local pointy = memory.alloc()
 
@@ -252,110 +351,160 @@ local function get_circle_coords(origin, radius, angle_degree)
     }
 end
 
-atest.draw_options_menu = function(target, trigger_option)
+context_menu.draw_options_menu = function(target, trigger_option)
     target.menu_pos = {
         x=target.screen_pos.x - target.offset.x,
         y=target.screen_pos.y - target.offset.y,
     }
     local radius = config.menu_radius
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, radius, config.color.options_circle)
-    local text = util.reverse_joaat(ENTITY.GET_ENTITY_MODEL(target.handle))
-    directx.draw_text(target.menu_pos.x, target.menu_pos.y, text, 5, 0.5, config.color.option_text, true)
+    directx.draw_text(target.menu_pos.x, target.menu_pos.y, target.name, 5, 0.5, config.color.option_text, true)
 
-    local option_width = 360 / #options
-    for option_index, option in options do
+    local option_width = 360 / #target.relevant_options
+    for option_index, option in target.relevant_options do
+        if option.name ~= nil then
 
-        local option_text_angle = ((option_index-1) * option_width) - 90
-        local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_text_angle)
-        directx.draw_text(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
+            local option_text_angle = ((option_index-1) * option_width) - 90
+            local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_text_angle)
+            context_menu.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
+            --directx.draw_text(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
 
-        local option_start_angle = option_text_angle - (option_width/2.1)
-        local option_start_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_start_angle)
-        local option_start_coords = get_circle_coords(target.menu_pos, radius, option_start_angle)
-        local option_end_angle = option_text_angle + (option_width/2.1)
-        local option_end_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_end_angle)
-        local option_end_coords = get_circle_coords(target.menu_pos, radius, option_end_angle)
+            local option_center_line = get_circle_coords(target.menu_pos, radius, option_text_angle)
+            local option_start_angle = option_text_angle - (option_width / 2 * config.option_wedge_padding)
+            local option_start_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_start_angle)
+            local option_start_coords = get_circle_coords(target.menu_pos, radius, option_start_angle)
+            local option_end_angle = option_text_angle + (option_width / 2 * config.option_wedge_padding)
+            local option_end_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_end_angle)
+            local option_end_coords = get_circle_coords(target.menu_pos, radius, option_end_angle)
 
-        local is_selected = is_point_in_polygon(
-            0.5, 0.5,
-            option_start_coords_close.x, option_start_coords_close.y,
-            option_start_coords.x, option_start_coords.y,
-            option_end_coords.x, option_end_coords.y,
-            option_end_coords_close.x, option_end_coords_close.y
-        )
+            local is_selected = is_point_in_polygon(
+                0.5, 0.5,
+                option_start_coords_close.x, option_start_coords_close.y,
+                option_start_coords.x, option_start_coords.y,
+                option_center_line.x, option_center_line.y,
+                option_end_coords.x, option_end_coords.y,
+                option_end_coords_close.x, option_end_coords_close.y
+            )
 
-        local draw_color = config.color.option_wedge
-        if is_selected then
-            draw_color = config.color.selected_option_wedge
-        end
+            local draw_color = config.color.option_wedge
+            if is_selected then
+                draw_color = config.color.selected_option_wedge
+            end
 
-        -- Draw polygon by drawing two triangles
-        directx.draw_triangle(
-            option_start_coords_close.x, option_start_coords_close.y,
-            option_start_coords.x, option_start_coords.y,
-            option_end_coords.x, option_end_coords.y,
-            draw_color
-        )
-        directx.draw_triangle(
-            option_start_coords_close.x, option_start_coords_close.y,
-            option_end_coords_close.x, option_end_coords_close.y,
-            option_end_coords.x, option_end_coords.y,
-            draw_color
-        )
+            -- Draw polygon by drawing multiple triangles
+            directx.draw_triangle(
+                option_start_coords_close.x, option_start_coords_close.y,
+                option_start_coords.x, option_start_coords.y,
+                option_end_coords.x, option_end_coords.y,
+                draw_color
+            )
+            directx.draw_triangle(
+                option_start_coords_close.x, option_start_coords_close.y,
+                option_end_coords_close.x, option_end_coords_close.y,
+                option_end_coords.x, option_end_coords.y,
+                draw_color
+            )
+            directx.draw_triangle(
+                option_center_line.x, option_center_line.y,
+                option_start_coords.x, option_start_coords.y,
+                option_end_coords.x, option_end_coords.y,
+                draw_color
+            )
 
-        if trigger_option and is_selected then
-            util.toast("Triggering option "..option_index)
+            if trigger_option and is_selected then
+                if option.execute ~= nil and type(option.execute) == "function" then
+                    util.toast("Triggering option "..option.name)
+                    option.execute(target)
+                end
+            end
         end
     end
 
 end
 
+context_menu.get_relevant_options = function(target)
+    local relevant_options = {}
+    for option_index, option in options do
+        if option.only_for_type == nil or option.only_for_type == target.type then
+            table.insert(relevant_options, option)
+        end
+    end
+    if #relevant_options == 1 then table.insert(relevant_options, {}) end
+    return relevant_options
+end
+
+context_menu.build_target = function(handle)
+    local new_target = {}
+    new_target.handle = handle
+    new_target.model_hash = ENTITY.GET_ENTITY_MODEL(new_target.handle)
+    new_target.model = util.reverse_joaat(new_target.model_hash)
+    new_target.name = new_target.model
+    new_target.type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(new_target.handle)]
+    if new_target.type == "VEHICLE" and VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash) then
+        new_target.name = VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash)
+    end
+    new_target.relevant_options = context_menu.get_relevant_options(new_target)
+    return new_target
+end
+
 menu.my_root():toggle_loop("Context Menu", {}, "", function(value)
     directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
-    if not isMenuOpen then
+    if not is_menu_open then
         local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
         local raycastResult = get_raycast_result(500.0, flag)
         if raycastResult.didHit and ENTITY.DOES_ENTITY_EXIST(raycastResult.hitEntity) then
-            target.handle = raycastResult.hitEntity
+            current_target = context_menu.build_target(raycastResult.hitEntity)
         else
-            target.handle = nil
+            current_target = nil
         end
     end
-    if target.handle ~= nil then
+    if current_target ~= nil then
         local player_screen_pos = {x=0, y=0}
         local myPos = players.get_position(players.user())
         if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(myPos.x, myPos.y, myPos.z, pointx, pointy) then
             player_screen_pos = {x=memory.read_float(pointx), y=memory.read_float(pointy)}
         end
-        target.screen_pos = {x=0, y=0}
-        target.pos = ENTITY.GET_ENTITY_COORDS(target.handle, true)
-        if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(target.pos.x, target.pos.y, target.pos.z, pointx, pointy) then
-            target.screen_pos = {x=memory.read_float(pointx), y=memory.read_float(pointy)}
+        current_target.screen_pos = { x=0, y=0}
+        current_target.pos = ENTITY.GET_ENTITY_COORDS(current_target.handle, true)
+        if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(current_target.pos.x, current_target.pos.y, current_target.pos.z, pointx, pointy) then
+            current_target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
         end
-        if target.screen_pos.x > 0 and target.screen_pos.y > 0 then
-            --directx.draw_line(player_screen_pos.x, player_screen_pos.y, target.screen_pos.x, target.screen_pos.y, draw_color)
-            atest.draw_bounding_box(target.handle, config.color.target_bounding_box)
-
+        if current_target.screen_pos.x > 0 and current_target.screen_pos.y > 0 then
+            context_menu.draw_bounding_box(current_target.handle, config.color.target_bounding_box)
             PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
-            PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
-            PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
             if PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
-                if not isMenuOpen then
-                    target.offset = {
-                        x=target.screen_pos.x - 0.5,
-                        y=target.screen_pos.y - 0.5,
+                if not is_menu_open then
+                    current_target.offset = {
+                        x= current_target.screen_pos.x - 0.5,
+                        y= current_target.screen_pos.y - 0.5,
                     }
                 end
-                isMenuOpen = true
-                atest.draw_options_menu(target, false)
+                is_menu_open = true
+                context_menu.draw_options_menu(current_target, false)
             else
-                if isMenuOpen then
-                    atest.draw_options_menu(target, true)
+                if is_menu_open then
+                    context_menu.draw_options_menu(current_target, true)
                 end
-                isMenuOpen = false
+                is_menu_open = false
             end
-
         end
-
     end
 end)
+
+---
+--- About Menu
+---
+
+local script_meta_menu = menu.my_root():list("About ContextMenu", {}, "Information about the script itself")
+script_meta_menu:divider("ContextMenu")
+script_meta_menu:readonly("Version", SCRIPT_VERSION)
+--if auto_update_config and auto_updater then
+--    script_meta_menu:action("Check for Update", {}, "The script will automatically check for updates at most daily, but you can manually check using this option anytime.", function()
+--        auto_update_config.check_interval = 0
+--        if auto_updater.run_auto_update(auto_update_config) then
+--            util.toast("No updates found")
+--        end
+--    end)
+--end
+script_meta_menu:hyperlink("Github Source", "https://github.com/hexarobi/stand-lua-context-menu", "View source files on Github")
+script_meta_menu:hyperlink("Discord", "https://discord.gg/RF4N7cKz", "Open Discord Server")
