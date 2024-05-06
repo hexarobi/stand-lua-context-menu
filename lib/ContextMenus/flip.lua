@@ -36,7 +36,7 @@ return {
             end
             util.log("new y = "..new_y)
             --ENTITY.SET_ENTITY_ROTATION(target.handle, rotation.x, new_y, rotation.z, 2, true)
-            ENTITY.APPLY_FORCE_TO_ENTITY(target.handle, 1, 0.0, 0.0, 5.71, 5.0, 0.0, 0.0, 1, false, true, true, true, true)
+            ENTITY.APPLY_FORCE_TO_ENTITY(target.handle, 1, 0.0, 0.0, 10.71, 5.0, 0.0, 0.0, 1, false, true, true, true, true)
 
             --ENTITY.APPLY_FORCE_TO_ENTITY(target.handle, 1, 0.0, 0.0, 10.71, 5.0, 0.0, 0.0, 1, false, true, true, true, true)
             --OBJECT.PLACE_OBJECT_ON_GROUND_PROPERLY(target.handle)
