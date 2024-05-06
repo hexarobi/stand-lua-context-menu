@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri
 
-local SCRIPT_VERSION = "0.3"
+local SCRIPT_VERSION = "0.4"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -308,8 +308,7 @@ local function get_raycast_result(dist, flag)
     return result
 end
 
-local function is_point_in_polygon( x, y, ...)
-    local vertices = {...}
+local function is_point_in_polygon( x, y, vertices)
     local points= {}
 
     for i=1, #vertices-1, 2 do
@@ -330,6 +329,36 @@ local function is_point_in_polygon( x, y, ...)
     return inside
 end
 
+local function build_vertices_list(wedge_points)
+    local vertices = {}
+    for _, point in wedge_points do
+        table.insert(vertices, point.x)
+        table.insert(vertices, point.y)
+    end
+    return vertices
+end
+
+local function draw_polygon(wedge_points, draw_color)
+    for point_index=1, (#wedge_points/2)-1 do
+        local top_point = wedge_points[point_index]
+        local bottom_point = wedge_points[#wedge_points - point_index + 1]
+        local next_top_point = wedge_points[point_index + 1]
+        local next_bottom_point = wedge_points[#wedge_points - point_index]
+        directx.draw_triangle(
+            top_point.x, top_point.y,
+            bottom_point.x, bottom_point.y,
+            next_top_point.x, next_top_point.y,
+            draw_color
+        )
+        directx.draw_triangle(
+            next_top_point.x, next_top_point.y,
+            bottom_point.x, bottom_point.y,
+            next_bottom_point.x, next_bottom_point.y,
+            draw_color
+        )
+    end
+end
+
 ---
 --- Context Menu
 ---
@@ -346,13 +375,55 @@ local function get_circle_coords(origin, radius, angle_degree)
     }
 end
 
+local function reverse_table(tab)
+    for i = 1, #tab//2, 1 do
+        tab[i], tab[#tab-i+1] = tab[#tab-i+1], tab[i]
+    end
+    return tab
+end
+
+
+local function build_wedge_points(target, option, option_index, option_width)
+
+    local radius = config.menu_radius
+    local option_angle = ((option_index-1) * option_width) - 90
+    local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_angle)
+    context_menu.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
+
+    local point_angles = {
+        option_angle - (option_width / 2 * config.option_wedge_padding),
+        option_angle - (option_width / 4 * config.option_wedge_padding),
+        option_angle,
+        option_angle + (option_width / 4 * config.option_wedge_padding),
+        option_angle + (option_width / 2 * config.option_wedge_padding),
+    }
+
+    local top_points = {}
+    local bottom_points = {}
+    for _, point_angle in point_angles do
+        local top_point = get_circle_coords(target.menu_pos, radius, point_angle)
+        table.insert(top_points, top_point)
+        local bottom_point = get_circle_coords(target.menu_pos, radius * config.option_wedge_deadzone, point_angle)
+        table.insert(bottom_points, bottom_point)
+    end
+
+    local final_points = {}
+    for _, top_point in top_points do
+        table.insert(final_points, top_point)
+    end
+    for _, bottom_point in reverse_table(bottom_points) do
+        table.insert(final_points, bottom_point)
+    end
+
+    return final_points
+end
+
 context_menu.draw_options_menu = function(target, trigger_option)
     target.menu_pos = {
         x=target.screen_pos.x - target.offset.x,
         y=target.screen_pos.y - target.offset.y,
     }
-    local radius = config.menu_radius
-    directx.draw_circle(target.menu_pos.x, target.menu_pos.y, radius, config.color.options_circle)
+    directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
     context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
 
     -- Split circle up into n slices of width `option_width` degrees
@@ -360,56 +431,18 @@ context_menu.draw_options_menu = function(target, trigger_option)
     for option_index, option in target.relevant_options do
         if option.name ~= nil then
 
-            local option_text_angle = ((option_index-1) * option_width) - 90
-            local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_text_angle)
-            context_menu.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
-
-            local option_center_line = get_circle_coords(target.menu_pos, radius, option_text_angle)
-            local option_start_angle = option_text_angle - (option_width / 2 * config.option_wedge_padding)
-            local option_start_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_start_angle)
-            local option_start_coords = get_circle_coords(target.menu_pos, radius, option_start_angle)
-            local option_end_angle = option_text_angle + (option_width / 2 * config.option_wedge_padding)
-            local option_end_coords_close = get_circle_coords(target.menu_pos, radius*config.option_wedge_deadzone, option_end_angle)
-            local option_end_coords = get_circle_coords(target.menu_pos, radius, option_end_angle)
-
-            local is_selected = is_point_in_polygon(
-                0.5, 0.5,
-                option_start_coords_close.x, option_start_coords_close.y,
-                option_start_coords.x, option_start_coords.y,
-                option_center_line.x, option_center_line.y,
-                option_end_coords.x, option_end_coords.y,
-                option_end_coords_close.x, option_end_coords_close.y
-            )
+            local wedge_points = build_wedge_points(target, option, option_index, option_width)
+            local vertices = build_vertices_list(wedge_points)
+            local is_selected = is_point_in_polygon(0.5, 0.5, vertices)
 
             local draw_color = config.color.option_wedge
-            if is_selected then
-                draw_color = config.color.selected_option_wedge
-            end
+            if is_selected then draw_color = config.color.selected_option_wedge end
 
-            -- Draw wedge polygon by drawing multiple triangles
-            directx.draw_triangle(
-                option_start_coords_close.x, option_start_coords_close.y,
-                option_start_coords.x, option_start_coords.y,
-                option_end_coords.x, option_end_coords.y,
-                draw_color
-            )
-            directx.draw_triangle(
-                option_start_coords_close.x, option_start_coords_close.y,
-                option_end_coords_close.x, option_end_coords_close.y,
-                option_end_coords.x, option_end_coords.y,
-                draw_color
-            )
-            directx.draw_triangle(
-                option_center_line.x, option_center_line.y,
-                option_start_coords.x, option_start_coords.y,
-                option_end_coords.x, option_end_coords.y,
-                draw_color
-            )
+            draw_polygon(wedge_points, draw_color)
 
             if is_selected then
                 context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9), option.help, 5, 0.5, config.color.help_text, true)
             end
-
 
             if trigger_option and is_selected then
                 if option.execute ~= nil and type(option.execute) == "function" then
