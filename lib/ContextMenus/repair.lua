@@ -1,32 +1,29 @@
 
-local function get_control_of_vehicle(vehicle)
-    if NETWORK.NETWORK_HAS_CONTROL_OF_ENTITY(vehicle) then
-        return vehicle
-    end
-    -- Loop until we get control
-    local netid = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(vehicle)
-    local has_control_ent = false
-    local loops = 15
-    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netid, true)
-
-    while not has_control_ent do
-        has_control_ent = NETWORK.NETWORK_REQUEST_CONTROL_OF_ENTITY(vehicle)
-        loops = loops - 1
-        util.yield(15)
-        if loops <= 0 then
-            break
-        end
-    end
-end
+--local function request_control_once(entity)
+--    if not NETWORK.NETWORK_IS_IN_SESSION() then
+--        return true
+--    end
+--    local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+--    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, true)
+--    return NETWORK.NETWORK_REQUEST_CONTROL_OF_ENTITY(entity)
+--end
+--
+--local function request_control(entity, timeout)
+--    if not ENTITY.DOES_ENTITY_EXIST(entity) then
+--        return false
+--    end
+--    local end_time = util.current_time_millis() + (timeout or 500)
+--    repeat util.yield_once() until request_control_once(entity) or util.current_time_millis() >= end_time
+--    return request_control_once(entity)
+--end
 
 return {
     name="Repair",
     help="Removes all damage and restores the vehicle to a driveable state",
-    author="Hexarobi",
     applicable_to={"VEHICLE"},
     execute=function(target)
         local vehicle = target.handle
-        if get_control_of_vehicle(vehicle) then
+        if entities.request_control(vehicle) then
             VEHICLE.SET_VEHICLE_FIXED(vehicle)
             FIRE.STOP_ENTITY_FIRE(vehicle)
             -- Also repair vehicle if its been destroyed by water

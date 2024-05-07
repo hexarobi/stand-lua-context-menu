@@ -1,7 +1,6 @@
 return {
     name="Drive",
     help="Attempt to drive the selected vehicle",
-    author="Hexarobi",
     applicable_to={"VEHICLE"},
     execute=function(target)
         util.toast("Driving "..target.name)
