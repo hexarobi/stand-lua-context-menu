@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri
 
-local SCRIPT_VERSION = "0.4"
+local SCRIPT_VERSION = "0.5"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -69,8 +69,9 @@ local config = {
     menu_radius=0.1,
     option_label_distance=0.6,
     option_wedge_deadzone=0.15,
-    option_wedge_padding=0.9,
-
+    option_wedge_padding=0.1,
+    show_target_name=true,
+    show_option_help=true,
     menu_options_scripts_dir="lib/ContextMenus",
 }
 
@@ -390,12 +391,13 @@ local function build_wedge_points(target, option, option_index, option_width)
     local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_angle)
     context_menu.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
 
+    local width_scale = 1 - config.option_wedge_padding
     local point_angles = {
-        option_angle - (option_width / 2 * config.option_wedge_padding),
-        option_angle - (option_width / 4 * config.option_wedge_padding),
+        option_angle - (option_width / 2 * width_scale),
+        option_angle - (option_width / 4 * width_scale),
         option_angle,
-        option_angle + (option_width / 4 * config.option_wedge_padding),
-        option_angle + (option_width / 2 * config.option_wedge_padding),
+        option_angle + (option_width / 4 * width_scale),
+        option_angle + (option_width / 2 * width_scale),
     }
 
     local top_points = {}
@@ -424,7 +426,10 @@ context_menu.draw_options_menu = function(target, trigger_option)
         y=target.screen_pos.y - target.offset.y,
     }
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
-    context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
+
+    if config.show_target_name then
+        context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
+    end
 
     -- Split circle up into n slices of width `option_width` degrees
     local option_width = 360 / #target.relevant_options
@@ -440,7 +445,7 @@ context_menu.draw_options_menu = function(target, trigger_option)
 
             draw_polygon(wedge_points, draw_color)
 
-            if is_selected then
+            if config.show_option_help and is_selected then
                 context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9), option.help, 5, 0.5, config.color.help_text, true)
             end
 
@@ -476,13 +481,33 @@ context_menu.get_relevant_options = function(target)
     return relevant_options
 end
 
+local function get_target_type(new_target)
+    local entity_type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(new_target.handle)]
+    if entity_type == "PED" and entities.is_player_ped(new_target.handle) then
+        return "PLAYER"
+    end
+    return entity_type
+end
+
+local function get_target_name(new_target)
+    if new_target.type == "PLAYER" then
+        for _, pid in players.list() do
+            local player_ped = PLAYER.GET_PLAYER_PED_SCRIPT_INDEX(pid)
+            if player_ped == new_target.handle then
+                return PLAYER.GET_PLAYER_NAME(pid)
+            end
+        end
+    end
+    return new_target.model
+end
+
 context_menu.build_target = function(handle)
     local new_target = {}
     new_target.handle = handle
     new_target.model_hash = ENTITY.GET_ENTITY_MODEL(new_target.handle)
     new_target.model = util.reverse_joaat(new_target.model_hash)
-    new_target.name = new_target.model
-    new_target.type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(new_target.handle)]
+    new_target.type = get_target_type(new_target)
+    new_target.name = get_target_name(new_target)
     if new_target.type == "VEHICLE" and VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash) then
         new_target.name = VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash)
     end
@@ -542,6 +567,10 @@ menu.my_root():toggle_loop("Context Menu", {}, "Enable right-click on in-game ob
     end
 end)
 
+---
+--- Menu Options
+---
+
 menus.menu_options = menu.my_root():list("Menu Options", {}, "Enable or disable specific context menu options.")
 menus.menu_options:action("Open ContextMenus Folder", {}, "Add ContextMenu scripts to this folder", function()
     util.open_folder(CONTEXT_MENUS_DIR)
@@ -560,6 +589,30 @@ for _, menu_option in cmm.menu_options do
         menu_option.enabled = value
     end, menu_option.enabled)
 end
+
+---
+--- Settings Menu
+---
+
+menus.settings = menu.my_root():list("Settings", {}, "Configuration options for this script.")
+menus.settings:toggle("Show Target Name", {}, "Should the target model name be displayed above the menu", function(value)
+    config.show_target_name = value
+end, config.show_target_name)
+menus.settings:toggle("Show Option Help", {}, "Should the selected option help text be displayed below the menu", function(value)
+    config.show_option_help = value
+end, config.show_option_help)
+menus.settings:slider("Selection Distance", {}, "The range that the context menu can find clickable targets", 1, 2000, config.selection_distance, 10, function(value)
+    config.selection_distance = value
+end)
+menus.settings:slider("Menu Radius", {}, "The size of the context menu disc", 5, 25, config.menu_radius * 100, 1, function(value)
+    config.menu_radius = value / 100
+end)
+menus.settings:slider("Deadzone", {}, "The center of the menu where no option is selected", 5, 30, config.option_wedge_deadzone * 100, 1, function(value)
+    config.option_wedge_deadzone = value / 100
+end)
+menus.settings:slider("Option Padding", {}, "The spacing between options", 0, 25, config.option_wedge_padding * 100, 1, function(value)
+    config.option_wedge_padding = value / 100
+end)
 
 ---
 --- About Menu
