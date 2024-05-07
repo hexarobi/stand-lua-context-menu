@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri
 
-local SCRIPT_VERSION = "0.5"
+local SCRIPT_VERSION = "0.6"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -36,8 +36,9 @@ if auto_updater == true then error("Invalid auto-updater lib. Please delete your
 ---
 
 local auto_update_config = {
-    source_url="https://raw.githubusercontent.com/hexarobi/stand-lua-context-menu/main/ContextMenu.lua",
+    --source_url="https://raw.githubusercontent.com/hexarobi/stand-lua-context-menu/main/ContextMenu.lua",
     script_relpath=SCRIPT_RELPATH,
+    project_url="https://github.com/hexarobi/stand-lua-context-menu",
 }
 if auto_updater == true then
     auto_updater.run_auto_update(auto_update_config)
@@ -621,13 +622,13 @@ end)
 local script_meta_menu = menu.my_root():list("About ContextMenu", {}, "Information about the script itself")
 script_meta_menu:divider("ContextMenu")
 script_meta_menu:readonly("Version", SCRIPT_VERSION)
---if auto_update_config and auto_updater then
---    script_meta_menu:action("Check for Update", {}, "The script will automatically check for updates at most daily, but you can manually check using this option anytime.", function()
---        auto_update_config.check_interval = 0
---        if auto_updater.run_auto_update(auto_update_config) then
---            util.toast("No updates found")
---        end
---    end)
---end
+if auto_update_config and auto_updater then
+    script_meta_menu:action("Check for Update", {}, "The script will automatically check for updates at most daily, but you can manually check using this option anytime.", function()
+        auto_update_config.check_interval = 0
+        if auto_updater.run_auto_update(auto_update_config) then
+            util.toast("No updates found")
+        end
+    end)
+end
 script_meta_menu:hyperlink("Github Source", "https://github.com/hexarobi/stand-lua-context-menu", "View source files on Github")
 script_meta_menu:hyperlink("Discord", "https://discord.gg/RF4N7cKz", "Open Discord Server")
