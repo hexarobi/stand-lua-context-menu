@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri
 
-local SCRIPT_VERSION = "0.8"
+local SCRIPT_VERSION = "0.9"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -72,7 +72,7 @@ local config = {
     selection_distance=1000.0,
     menu_radius=0.1,
     option_label_distance=0.6,
-    option_wedge_deadzone=0.15,
+    option_wedge_deadzone=0.10,
     option_wedge_padding=0.0,
     show_target_name=true,
     show_option_help=true,
@@ -475,16 +475,39 @@ end
 
 local selected_option
 
+local function pushback_to_center(current_pos, target_pos)
+    local pushback_amount = 0.003
+    local pushback_deadzone = 0.005
+    if current_pos > target_pos + pushback_deadzone then
+        return current_pos - pushback_amount
+    elseif current_pos < target_pos - pushback_deadzone then
+        return current_pos + pushback_amount
+    end
+    return target_pos
+end
+
 context_menu.draw_options_menu = function(target, trigger_option)
     target.menu_pos = { x=0.5, y=0.5, }
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
     directx.draw_line(0.5, 0.5, target.screen_pos.x, target.screen_pos.y, config.color.crosshair)
+
+    directx.draw_circle(target.cursor_pos.x, target.cursor_pos.y, 0.001, config.color.crosshair)
 
     if config.show_target_name and target.name ~= nil then
         context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
     end
 
     local angle, magnitude = get_controls_angle_magnitude()
+
+    local mouse_movement = {
+        x=PAD.GET_CONTROL_NORMAL(0, 13),
+        y=PAD.GET_CONTROL_NORMAL(0, 12),
+    }
+    local mouse_amount = 0.01
+    target.cursor_pos.x = target.cursor_pos.x + (mouse_movement.x * mouse_amount)
+    target.cursor_pos.y = target.cursor_pos.y + (mouse_movement.y * mouse_amount)
+    target.cursor_pos.x = pushback_to_center(target.cursor_pos.x, target.menu_pos.x)
+    target.cursor_pos.y = pushback_to_center(target.cursor_pos.y, target.menu_pos.y)
 
     -- If only one option then assume two so the menu isnt just a single circle
     local num_options = math.max(#target.relevant_options, 2)
@@ -497,17 +520,25 @@ context_menu.draw_options_menu = function(target, trigger_option)
             local point_angles = calculate_point_angles(target, option, option_angle, option_width)
             local wedge_points = build_wedge_points(point_angles, target)
 
-            if angle then
-                local first_point_angle = point_angles[1]
-                local last_point_angle = point_angles[#point_angles]
-                local is_option_pointed_at = is_angle_between(angle, first_point_angle, last_point_angle)
-                if is_option_pointed_at and magnitude > 0.1 then
-                    selected_option = option
-                elseif selected_option == option and (not is_option_pointed_at) then
-                    selected_option = nil
-                end
+            --if angle then
+            --    local first_point_angle = point_angles[1]
+            --    local last_point_angle = point_angles[#point_angles]
+            --    local is_option_pointed_at = is_angle_between(angle, first_point_angle, last_point_angle)
+            --    if is_option_pointed_at and magnitude > 0.1 then
+            --        selected_option = option
+            --    elseif selected_option == option and (not is_option_pointed_at) then
+            --        selected_option = nil
+            --    end
+            --end
+            --local is_selected = selected_option == option
+
+            local vertices = build_vertices_list(wedge_points)
+            local is_selected = is_point_in_polygon(target.cursor_pos.x, target.cursor_pos.y, vertices)
+            if is_selected then
+                selected_option = option
+            elseif selected_option == option then
+                selected_option = nil
             end
-            local is_selected = selected_option == option
 
             local draw_color = config.color.option_wedge
             if is_selected then draw_color = config.color.selected_option_wedge end
@@ -666,6 +697,7 @@ end
 context_menu.open = function()
     if not is_menu_open then
         selected_option = nil
+        current_target.cursor_pos = { x=0.5, y=0.5, }
     end
     is_menu_open = true
     context_menu.draw_options_menu(current_target, false)
@@ -695,7 +727,6 @@ local function context_menu_draw_tick()
     PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
     PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
 
-    --directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
     if not is_menu_open then
         current_target = context_menu.get_raycast_target()
     end
