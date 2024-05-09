@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri
 
-local SCRIPT_VERSION = "0.6"
+local SCRIPT_VERSION = "0.8"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -57,20 +57,23 @@ util.ensure_package_is_installed('lua/inspect')
 local inspect = require("inspect")
 
 local config = {
+    debug_mode = false,
+    context_menu_enabled=true,
     color = {
         options_circle={r=1, g=1, b=1, a=0.1},
         option_text={r=1, g=1, b=1, a=1},
         help_text={r=0.8, g=0.8, b=0.8, a=1},
         option_wedge={r=1, g=1, b=1, a=0.3},
-        selected_option_wedge={r=1, g=0.5, b=0.5, a=0.5},
-        target_bounding_box={r=255,g=0,b=0,a=255},
+        selected_option_wedge={r=1, g=0, b=1, a=0.3},
+        target_ball={r=1,g=0,b=1,a=0.2},
+        target_bounding_box={r=1,g=0,b=1,a=1},
         crosshair={r=1, g=1, b=1, a=0.5},
     },
     selection_distance=1000.0,
     menu_radius=0.1,
     option_label_distance=0.6,
     option_wedge_deadzone=0.15,
-    option_wedge_padding=0.1,
+    option_wedge_padding=0.0,
     show_target_name=true,
     show_option_help=true,
     menu_options_scripts_dir="lib/ContextMenus",
@@ -83,11 +86,6 @@ local function debug_log(text)
     util.log("[ContextMenuManager] "..text)
 end
 
-local function is_in(needle, list)
-    for _, item in pairs(list) do if item == needle then return true end end
-    return false
-end
-
 cmm.add_context_menu_option = function(menu_option)
     cmm.default_menu_option(menu_option)
     debug_log("Adding menu option "..menu_option.name or "Unknown")
@@ -95,7 +93,17 @@ cmm.add_context_menu_option = function(menu_option)
 end
 
 cmm.default_menu_option = function(menu_option)
+    if menu_option.name == nil then menu_option.name = "Unknown Name" end
     if menu_option.enabled == nil then menu_option.enabled = true end
+    if menu_option.priority == nil then menu_option.priority = 0 end
+end
+
+cmm.empty_menu_option = function()
+    return {
+        name="",
+        priority=-1,
+        is_empty=true
+    }
 end
 
 cmm.refresh_menu_options_from_files = function(directory, path)
@@ -135,19 +143,22 @@ local rightVector_pointer = memory.alloc()
 local forwardVector_pointer = memory.alloc()
 local position_pointer = memory.alloc()
 
--- From GridSpawn
-context_menu.draw_bounding_box = function(entity, colour)
+context_menu.draw_bounding_box = function(target, colour)
     if colour == nil then
-        colour = {r=255,g=0,b=0,a=255}
+        colour = config.color.target_bounding_box
+    end
+    if target.model_hash == nil then
+        debug_log("Could not draw bounding box: No model hash set")
+        return
     end
 
-    MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), minimum, maximum)
+    MISC.GET_MODEL_DIMENSIONS(target.model_hash, minimum, maximum)
     local minimum_vec = v3.new(minimum)
     local maximum_vec = v3.new(maximum)
-    context_menu.draw_bounding_box_with_dimensions(entity, colour, minimum_vec, maximum_vec)
+    context_menu.draw_bounding_box_with_dimensions(target.handle, colour, minimum_vec, maximum_vec)
 end
 
-context_menu.draw_bounding_box_with_dimensions = function(entity, colour, minimum_vec, maximum_vec)
+context_menu.draw_bounding_box_with_dimensions = function(entity, color, minimum_vec, maximum_vec)
 
     local dimensions = {x = maximum_vec.y - minimum_vec.y, y = maximum_vec.x - minimum_vec.x, z = maximum_vec.z - minimum_vec.z}
 
@@ -164,6 +175,8 @@ context_menu.draw_bounding_box_with_dimensions = function(entity, colour, minimu
     local bottom_right =        {x = -up_vector.x * dimensions.z + top_right.x,             y = -up_vector.y * dimensions.z + top_right.y,              z = -up_vector.z * dimensions.z + top_right.z}
     local bottom_left =         {x = forward_vector.x * dimensions.y + bottom_left_back.x,  y = forward_vector.y * dimensions.y + bottom_left_back.y,   z = forward_vector.z * dimensions.y + bottom_left_back.z}
     local top_left_back =       {x = up_vector.x * dimensions.z + bottom_left_back.x,       y = up_vector.y * dimensions.z + bottom_left_back.y,        z = up_vector.z * dimensions.z + bottom_left_back.z}
+
+    local colour = {r=color.r*255, g=color.g*255, b=color.b*255, a=color.a*255}
 
     GRAPHICS.DRAW_LINE(
             top_right.x, top_right.y, top_right.z,
@@ -384,11 +397,8 @@ local function reverse_table(tab)
     return tab
 end
 
-
-local function build_wedge_points(target, option, option_index, option_width)
-
+local function calculate_point_angles(target, option, option_angle, option_width)
     local radius = config.menu_radius
-    local option_angle = ((option_index-1) * option_width) - 90
     local option_text_coords = get_circle_coords(target.menu_pos, radius*config.option_label_distance, option_angle)
     context_menu.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
 
@@ -400,13 +410,17 @@ local function build_wedge_points(target, option, option_index, option_width)
         option_angle + (option_width / 4 * width_scale),
         option_angle + (option_width / 2 * width_scale),
     }
+    return point_angles
+end
 
+
+local function build_wedge_points(point_angles, target)
     local top_points = {}
     local bottom_points = {}
     for _, point_angle in point_angles do
-        local top_point = get_circle_coords(target.menu_pos, radius, point_angle)
+        local top_point = get_circle_coords(target.menu_pos, config.menu_radius, point_angle)
         table.insert(top_points, top_point)
-        local bottom_point = get_circle_coords(target.menu_pos, radius * config.option_wedge_deadzone, point_angle)
+        local bottom_point = get_circle_coords(target.menu_pos, config.menu_radius * config.option_wedge_deadzone, point_angle)
         table.insert(bottom_points, bottom_point)
     end
 
@@ -421,25 +435,79 @@ local function build_wedge_points(target, option, option_index, option_width)
     return final_points
 end
 
-context_menu.draw_options_menu = function(target, trigger_option)
-    target.menu_pos = {
-        x=target.screen_pos.x - target.offset.x,
-        y=target.screen_pos.y - target.offset.y,
-    }
-    directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
+--local function angular_distance(first_angle, second_angle)
+--    local short_distance = second_angle - first_angle
+--    local long_distance = 360 + (first_angle - second_angle)
+--    return minimum(short_distance, long_distance)
+--end
+--
+--local function is_angle_within_wedge(selection_angle, first_point_angle, last_point_angle)
+--    if selection_angle > first_point_angle and selection_angle < last_point_angle then
+--end
 
-    if config.show_target_name then
+local function normalize_angle(angle)
+    return (angle + 360) % 360
+end
+
+local function is_angle_between(angle, left, right)
+    local normal_angle = normalize_angle(angle)
+    local normal_left = normalize_angle(left)
+    local normal_right = normalize_angle(right)
+    --util.log("checking if "..normal_angle.." between "..normal_left.." and "..normal_right)
+    if (normal_left < normal_right) then
+        return (normal_left <= normal_angle and normal_angle <= normal_right)
+    else
+        return (normal_left <= normal_angle or normal_angle <= normal_right)
+    end
+end
+
+local function get_controls_angle_magnitude()
+    PAD.DISABLE_CONTROL_ACTION(0, 1, false) --x
+    PAD.DISABLE_CONTROL_ACTION(0, 2, false) --y
+    local mouse_movement = {
+        x=PAD.GET_CONTROL_NORMAL(0, 13),
+        y=PAD.GET_CONTROL_NORMAL(0, 12),
+    }
+    local magnitude = math.sqrt(mouse_movement.x ^ 2 + mouse_movement.y ^ 2)
+    local angle = math.deg(math.atan(mouse_movement.y, mouse_movement.x))
+    return angle, magnitude
+end
+
+local selected_option
+
+context_menu.draw_options_menu = function(target, trigger_option)
+    target.menu_pos = { x=0.5, y=0.5, }
+    directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
+    directx.draw_line(0.5, 0.5, target.screen_pos.x, target.screen_pos.y, config.color.crosshair)
+
+    if config.show_target_name and target.name ~= nil then
         context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
     end
 
+    local angle, magnitude = get_controls_angle_magnitude()
+
+    -- If only one option then assume two so the menu isnt just a single circle
+    local num_options = math.max(#target.relevant_options, 2)
     -- Split circle up into n slices of width `option_width` degrees
-    local option_width = 360 / #target.relevant_options
+    local option_width = 360 / num_options
     for option_index, option in target.relevant_options do
         if option.name ~= nil then
 
-            local wedge_points = build_wedge_points(target, option, option_index, option_width)
-            local vertices = build_vertices_list(wedge_points)
-            local is_selected = is_point_in_polygon(0.5, 0.5, vertices)
+            local option_angle = ((option_index-1) * option_width) - 90
+            local point_angles = calculate_point_angles(target, option, option_angle, option_width)
+            local wedge_points = build_wedge_points(point_angles, target)
+
+            if angle then
+                local first_point_angle = point_angles[1]
+                local last_point_angle = point_angles[#point_angles]
+                local is_option_pointed_at = is_angle_between(angle, first_point_angle, last_point_angle)
+                if is_option_pointed_at and magnitude > 0.1 then
+                    selected_option = option
+                elseif selected_option == option and (not is_option_pointed_at) then
+                    selected_option = nil
+                end
+            end
+            local is_selected = selected_option == option
 
             local draw_color = config.color.option_wedge
             if is_selected then draw_color = config.color.selected_option_wedge end
@@ -465,7 +533,7 @@ local function is_menu_option_relevant(menu_option, target)
     if menu_option.enabled == false then
         return false
     end
-    if menu_option.applicable_to ~= nil and not is_in(target.type, menu_option.applicable_to) then
+    if menu_option.applicable_to ~= nil and not table.contains(menu_option.applicable_to, target.type) then
         return false
     end
     return true
@@ -478,12 +546,14 @@ context_menu.get_relevant_options = function(target)
             table.insert(relevant_options, option)
         end
     end
-    if #relevant_options == 1 then table.insert(relevant_options, {}) end
+    --if #relevant_options == 1 then table.insert(relevant_options, cmm.empty_menu_option()) end
+    table.sort(relevant_options, function(a,b) return a.name > b.name end)
+    table.sort(relevant_options, function(a,b) return a.priority > b.priority end)
     return relevant_options
 end
 
 local function get_target_type(new_target)
-    local entity_type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(new_target.handle)]
+    local entity_type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(new_target.handle)] or "WORLD_OBJECT"
     if entity_type == "PED" and entities.is_player_ped(new_target.handle) then
         return "PLAYER"
     end
@@ -502,71 +572,182 @@ local function get_target_name(new_target)
     return new_target.model
 end
 
-context_menu.build_target = function(handle)
+-- credit to the amazing aarroonn
+local function get_model_hash(handle_or_ptr)
+    if handle_or_ptr < 0xFFFFFF then
+        handle_or_ptr = entities.handle_to_pointer(handle_or_ptr)
+    end
+    local model_info = memory.read_long(handle_or_ptr + 0x20)
+    if model_info ~= 0 then
+        return memory.read_int(model_info + 0x18)
+    end
+end
+
+context_menu.build_target = function(raycastResult)
     local new_target = {}
-    new_target.handle = handle
-    new_target.model_hash = ENTITY.GET_ENTITY_MODEL(new_target.handle)
-    new_target.model = util.reverse_joaat(new_target.model_hash)
-    new_target.type = get_target_type(new_target)
-    new_target.name = get_target_name(new_target)
+    local model_hash
+    if raycastResult.didHit then
+        model_hash = get_model_hash(raycastResult.hitEntity)
+    end
+
+    if config.debug_mode then
+        util.draw_debug_text("didhit = "..raycastResult.didHit)
+        util.draw_debug_text("handle = "..raycastResult.hitEntity)
+        util.draw_debug_text("endcoords = "..raycastResult.endCoords.x..","..raycastResult.endCoords.y)
+        util.draw_debug_text("hash = "..tostring(model_hash))
+    end
+
+    if raycastResult.endCoords.x ~= 0 and raycastResult.endCoords.y ~= 0 then
+        new_target.type = "COORDS"
+        new_target.pos = {x=raycastResult.endCoords.x, y=raycastResult.endCoords.y, z=raycastResult.endCoords.z}
+        new_target.name = "Coords: "..string.format("%.3f", new_target.pos.x)..","..string.format("%.3f", new_target.pos.y)
+    end
+
+    if raycastResult.didHit and model_hash ~= nil then
+        if raycastResult.hitEntity ~= nil and ENTITY.DOES_ENTITY_EXIST(raycastResult.hitEntity) then
+            new_target.handle = raycastResult.hitEntity
+            new_target.model_hash = get_model_hash(new_target.handle)
+            if new_target.model_hash then
+                new_target.model = util.reverse_joaat(new_target.model_hash)
+            end
+            new_target.type = get_target_type(new_target)
+            new_target.name = get_target_name(new_target)
+        end
+    end
+
     if new_target.type == "VEHICLE" and VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash) then
         new_target.name = VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(new_target.model_hash)
     end
     new_target.relevant_options = context_menu.get_relevant_options(new_target)
-    new_target.screen_pos = {
-        x=0.5, y=0.5,
-    }
-    new_target.offset = {x=0, y=0}
+    new_target.screen_pos = { x=0.5, y=0.5, }
     return new_target
 end
 
 context_menu.get_raycast_target = function()
-    local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
+    --local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
+    local flag = TraceFlag.everything
     local raycastResult = get_raycast_result(config.selection_distance, flag)
-    if raycastResult.didHit and ENTITY.DOES_ENTITY_EXIST(raycastResult.hitEntity) then
-        return context_menu.build_target(raycastResult.hitEntity)
-    end
+    return context_menu.build_target(raycastResult)
 end
 
-menu.my_root():toggle_loop("Context Menu", {}, "Enable right-click on in-game objects for context menu.", function(value)
-    directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
+--local menu_cam
+
+--local function create_cam(coords) --credits to Hexarobi for the functions and help with them.
+--    --local cam_pos = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(veh, 0, 2, 5)
+--    if menu_cam ~= nil then return end
+--    util.toast("creating dam", TOAST_ALL)
+--    local cam_rot = CAM.GET_FINAL_RENDERED_CAM_ROT(2)
+--    local cam_pos = CAM.GET_FINAL_RENDERED_CAM_COORD()
+--    local cam_fov = CAM.GET_FINAL_RENDERED_CAM_FOV()
+--    local cam = CAM.CREATE_CAM_WITH_PARAMS(
+--        "DEFAULT_SCRIPTED_CAMERA",
+--            cam_pos.x, cam_pos.y, cam_pos.z,
+--            cam_rot.x, cam_rot.y, cam_rot.z, cam_fov, false, 0
+--    )
+--    --CAM.POINT_CAM_AT_ENTITY(camera, veh, 0, 0, 0, true)
+--    CAM.SET_CAM_ACTIVE(cam, true)
+--    CAM.RENDER_SCRIPT_CAMS(true, true, 1000, true, true, 0)
+--    util.yield(1000)
+--    CAM.STOP_CAM_POINTING(cam)
+--    menu_cam = cam
+--    return menu_cam
+--end
+--
+--local function destroy_cam()
+--    if menu_cam ~= nil then
+--        util.toast("destroying dam", TOAST_ALL)
+--        CAM.RENDER_SCRIPT_CAMS(false, false, 1000, true, false, 0)
+--        CAM.DESTROY_CAM(menu_cam, true)
+--        CAM.DESTROY_ALL_CAMS(true)
+--        menu_cam = nil
+--    end
+--end
+
+context_menu.open = function()
+    if not is_menu_open then
+        selected_option = nil
+    end
+    is_menu_open = true
+    context_menu.draw_options_menu(current_target, false)
+end
+
+context_menu.close = function()
+    if is_menu_open then
+        context_menu.draw_options_menu(current_target, true)
+    end
+    is_menu_open = false
+end
+
+--local probe_start_pos_out = memory.alloc()
+--local probe_end_pos_out = memory.alloc()
+
+--local function get_mouse_cursor_dir()
+--    SHAPETEST.START_SHAPE_TEST_MOUSE_CURSOR_LOS_PROBE(probe_start_pos_out, probe_end_pos_out, 0, 0, 0)
+--    local probe_dir = v3.new(probe_end_pos_out)
+--    probe_dir:sub(v3.new(probe_start_pos_out))
+--    return probe_dir
+--end
+
+local function context_menu_draw_tick()
+    if not config.context_menu_enabled then return true end
+
+    PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
+    PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
+    PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
+
+    --directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
     if not is_menu_open then
         current_target = context_menu.get_raycast_target()
     end
-    if current_target ~= nil then
-        --if not is_menu_open then
-            local player_screen_pos = {x=0, y=0}
-            local myPos = players.get_position(players.user())
-            if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(myPos.x, myPos.y, myPos.z, pointx, pointy) then
-                player_screen_pos = {x=memory.read_float(pointx), y=memory.read_float(pointy)}
+    if current_target ~= nil and current_target.pos ~= nil then
+        if current_target.type ~= "COORDS" and current_target.handle ~= nil then
+            if not is_menu_open then
+                local player_screen_pos = {x=0, y=0}
+                local myPos = players.get_position(players.user())
+                if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(myPos.x, myPos.y, myPos.z, pointx, pointy) then
+                    player_screen_pos = {x=memory.read_float(pointx), y=memory.read_float(pointy)}
+                end
+                current_target.screen_pos = { x=0, y=0}
+                current_target.pos = ENTITY.GET_ENTITY_COORDS(current_target.handle, true)
+                if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(current_target.pos.x, current_target.pos.y, current_target.pos.z, pointx, pointy) then
+                    current_target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
+                end
             end
-            current_target.screen_pos = { x=0, y=0}
-            current_target.pos = ENTITY.GET_ENTITY_COORDS(current_target.handle, true)
-            if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(current_target.pos.x, current_target.pos.y, current_target.pos.z, pointx, pointy) then
-                current_target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
+            if current_target.screen_pos.x > 0 and current_target.screen_pos.y > 0 then
+                context_menu.draw_bounding_box(current_target)
+                if PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
+                    context_menu.open()
+                else
+                    context_menu.close()
+                end
             end
-        --end
-        if current_target.screen_pos.x > 0 and current_target.screen_pos.y > 0 then
-            context_menu.draw_bounding_box(current_target.handle, config.color.target_bounding_box)
-            PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
+        else
+            util.draw_sphere(
+                current_target.pos, 0.2,
+                config.color.target_ball.r*255,
+                config.color.target_ball.g*255,
+                config.color.target_ball.b*255,
+                config.color.target_ball.a*255,
+                40
+            )
             if PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
-                if not is_menu_open then
-                    current_target.offset = {
-                        x= current_target.screen_pos.x - 0.5,
-                        y= current_target.screen_pos.y - 0.5,
-                    }
+                if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(current_target.pos.x, current_target.pos.y, current_target.pos.z, pointx, pointy) then
+                    current_target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
                 end
-                is_menu_open = true
-                context_menu.draw_options_menu(current_target, false)
+                context_menu.open()
             else
-                if is_menu_open then
-                    context_menu.draw_options_menu(current_target, true)
-                end
-                is_menu_open = false
+                context_menu.close()
             end
         end
+    else
     end
-end)
+
+    return true
+end
+
+menu.my_root():toggle("Context Menu enabled", {}, "Right-click on in-game objects to open context menu.", function(value)
+    config.context_menu_enabled = value
+end, config.context_menu_enabled)
 
 ---
 --- Menu Options
@@ -632,3 +813,9 @@ if auto_update_config and auto_updater then
 end
 script_meta_menu:hyperlink("Github Source", "https://github.com/hexarobi/stand-lua-context-menu", "View source files on Github")
 script_meta_menu:hyperlink("Discord", "https://discord.gg/RF4N7cKz", "Open Discord Server")
+
+---
+--- Tick Handlers
+---
+
+util.create_tick_handler(context_menu_draw_tick)
