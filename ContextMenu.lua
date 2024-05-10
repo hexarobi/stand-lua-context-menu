@@ -1,8 +1,8 @@
 -- Context Menu Manager
 -- by Hexarobi
--- with code from Wiri
+-- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.9"
+local SCRIPT_VERSION = "0.10"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -65,14 +65,15 @@ local config = {
         help_text={r=0.8, g=0.8, b=0.8, a=1},
         option_wedge={r=1, g=1, b=1, a=0.3},
         selected_option_wedge={r=1, g=0, b=1, a=0.3},
-        target_ball={r=1,g=0,b=1,a=0.2},
+        target_ball={r=1,g=0,b=1,a=0.8},
         target_bounding_box={r=1,g=0,b=1,a=1},
         crosshair={r=1, g=1, b=1, a=0.5},
     },
+    target_ball_size=0.4,
     selection_distance=1000.0,
     menu_radius=0.1,
     option_label_distance=0.6,
-    option_wedge_deadzone=0.10,
+    option_wedge_deadzone=0.2,
     option_wedge_padding=0.0,
     show_target_name=true,
     show_option_help=true,
@@ -462,8 +463,6 @@ local function is_angle_between(angle, left, right)
 end
 
 local function get_controls_angle_magnitude()
-    PAD.DISABLE_CONTROL_ACTION(0, 1, false) --x
-    PAD.DISABLE_CONTROL_ACTION(0, 2, false) --y
     local mouse_movement = {
         x=PAD.GET_CONTROL_NORMAL(0, 13),
         y=PAD.GET_CONTROL_NORMAL(0, 12),
@@ -478,36 +477,49 @@ local selected_option
 local function pushback_to_center(current_pos, target_pos)
     local pushback_amount = 0.003
     local pushback_deadzone = 0.005
-    if current_pos > target_pos + pushback_deadzone then
-        return current_pos - pushback_amount
-    elseif current_pos < target_pos - pushback_deadzone then
-        return current_pos + pushback_amount
-    end
-    return target_pos
+    local next_pos = {
+        x = current_pos.x - target_pos.x,
+        y = current_pos.y - target_pos.y,
+    }
+    --if current_pos > target_pos + pushback_deadzone then
+    --    return current_pos - pushback_amount
+    --elseif current_pos < target_pos - pushback_deadzone then
+    --    return current_pos + pushback_amount
+    --end
+
+
+    --local magnitude = math.sqrt(next_pos.x ^ 2 + next_pos.y ^ 2)
+    --local angle = math.deg(math.atan(next_pos.y, next_pos.x))
+    --
+    --return get_circle_coords(target_pos, 1 - magnitude, angle)
+
+    return current_pos
 end
 
 context_menu.draw_options_menu = function(target, trigger_option)
     target.menu_pos = { x=0.5, y=0.5, }
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
     directx.draw_line(0.5, 0.5, target.screen_pos.x, target.screen_pos.y, config.color.crosshair)
-
-    directx.draw_circle(target.cursor_pos.x, target.cursor_pos.y, 0.001, config.color.crosshair)
+    --directx.draw_circle(target.cursor_pos.x, target.cursor_pos.y, 0.001, config.color.crosshair)
 
     if config.show_target_name and target.name ~= nil then
         context_menu.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
     end
 
-    local angle, magnitude = get_controls_angle_magnitude()
+    PAD.DISABLE_CONTROL_ACTION(0, 1, false) --x
+    PAD.DISABLE_CONTROL_ACTION(0, 2, false) --y
+    if PAD.IS_USING_KEYBOARD_AND_MOUSE(1) then
+        HUD.SET_MOUSE_CURSOR_THIS_FRAME()
+        HUD.SET_MOUSE_CURSOR_STYLE(1)
+        target.cursor_pos = {
+            x=PAD.GET_CONTROL_NORMAL(0, 239),
+            y=PAD.GET_CONTROL_NORMAL(0, 240),
+        }
+    else
+        local angle, magnitude = get_controls_angle_magnitude()
+        -- TODO: controller work
+    end
 
-    local mouse_movement = {
-        x=PAD.GET_CONTROL_NORMAL(0, 13),
-        y=PAD.GET_CONTROL_NORMAL(0, 12),
-    }
-    local mouse_amount = 0.01
-    target.cursor_pos.x = target.cursor_pos.x + (mouse_movement.x * mouse_amount)
-    target.cursor_pos.y = target.cursor_pos.y + (mouse_movement.y * mouse_amount)
-    target.cursor_pos.x = pushback_to_center(target.cursor_pos.x, target.menu_pos.x)
-    target.cursor_pos.y = pushback_to_center(target.cursor_pos.y, target.menu_pos.y)
 
     -- If only one option then assume two so the menu isnt just a single circle
     local num_options = math.max(#target.relevant_options, 2)
@@ -698,6 +710,7 @@ context_menu.open = function()
     if not is_menu_open then
         selected_option = nil
         current_target.cursor_pos = { x=0.5, y=0.5, }
+        PAD.SET_CURSOR_POSITION(current_target.cursor_pos.x, current_target.cursor_pos.y)
     end
     is_menu_open = true
     context_menu.draw_options_menu(current_target, false)
@@ -754,7 +767,8 @@ local function context_menu_draw_tick()
             end
         else
             util.draw_sphere(
-                current_target.pos, 0.2,
+                current_target.pos,
+                config.target_ball_size,
                 config.color.target_ball.r*255,
                 config.color.target_ball.g*255,
                 config.color.target_ball.b*255,
