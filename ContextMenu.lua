@@ -293,6 +293,10 @@ cmm.draw_text_with_shadow = function(posx, posy, text, alignment, scale, color, 
     directx.draw_text(posx, posy, text, alignment, scale, color, force_in_bounds)
 end
 
+---
+--- Color Menu Outputs
+---
+
 cmm.color_menu_output = function(output_color)
     return {
         r=math.floor(output_color.r * 255),
@@ -320,17 +324,17 @@ local function get_offset_from_cam(dist)
     return offset
 end
 
-local TraceFlag =
-{
-    everything = 4294967295,
-    none = 0,
-    world = 1,
-    vehicles = 2,
-    pedsSimpleCollision = 4,
-    peds = 8,
-    objects = 16,
-    water = 32,
-    foliage = 256,
+local TRACE_FLAG = {
+    MOVER = 1,
+    VEHICLE = 2,
+    PED = 4,
+    RAGDOLL = 8,
+    OBJECT = 16,
+    PICKUP = 32,
+    GLASS = 64,
+    RIVER = 128,
+    FOLIAGE = 256,
+    ALL = 511,
 }
 
 ---@class RaycastResult
@@ -344,7 +348,7 @@ local TraceFlag =
 ---@return RaycastResult
 local function get_raycast_result(dist, flag)
     local result = {}
-    flag = flag or TraceFlag.everything
+    flag = flag or TRACE_FLAG.ALL
     local didHit = memory.alloc(1)
     local endCoords = v3.new()
     local normal = v3.new()
@@ -679,8 +683,8 @@ local function get_target_name(target)
                 return PLAYER.GET_PLAYER_NAME(pid)
             end
         end
-    elseif target.type == "VEHICLE" and VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(target.model_hash) then
-        target.name = VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(target.model_hash)
+    elseif target.type == "VEHICLE" then
+        return util.get_label_text(VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(target.model_hash))
     end
     return target.model
 end
@@ -737,8 +741,9 @@ cmm.build_target = function(raycastResult)
 end
 
 cmm.get_raycast_target = function()
-    --local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects
-    local flag = TraceFlag.everything
+    local flag = TRACE_FLAG.VEHICLE | TRACE_FLAG.OBJECT | TRACE_FLAG.MOVER | TRACE_FLAG.PED | TRACE_FLAG.GLASS
+    --local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects | TraceFlag.world
+    --local flag = TraceFlag.everything
     local raycastResult = get_raycast_result(config.selection_distance, flag)
     return cmm.build_target(raycastResult)
 end
@@ -812,16 +817,6 @@ cmm.close_options_menu = function(target)
     end
 end
 
---local probe_start_pos_out = memory.alloc()
---local probe_end_pos_out = memory.alloc()
-
---local function get_mouse_cursor_dir()
---    SHAPETEST.START_SHAPE_TEST_MOUSE_CURSOR_LOS_PROBE(probe_start_pos_out, probe_end_pos_out, 0, 0, 0)
---    local probe_dir = v3.new(probe_end_pos_out)
---    probe_dir:sub(v3.new(probe_start_pos_out))
---    return probe_dir
---end
-
 cmm.draw_selection = function(target)
     if target.type == "COORDS" then
         util.draw_sphere(
@@ -894,6 +889,9 @@ end, config.show_option_help)
 menus.settings:slider("Selection Distance", {"cmmselectiondistance"}, "The range that the context menu can find clickable targets", 1, 2000, config.selection_distance, 10, function(value)
     config.selection_distance = value
 end)
+menus.settings:slider("Target Ball Size", {"cmmtargetballsize"}, "The size of the world target cursor ball", 5, 140, config.target_ball_size * 100, 5, function(value)
+    config.target_ball_size = value / 100
+end)
 menus.settings:slider("Menu Radius", {"cmmmenuradius"}, "The size of the context menu disc", 5, 25, config.menu_radius * 100, 1, function(value)
     config.menu_radius = value / 100
 end)
@@ -904,25 +902,25 @@ menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing betwe
     config.option_wedge_padding = value / 100
 end)
 
-menus.settings:divider("Colors")
-menus.settings:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
+menus.settings_colors = menus.settings:list("Colors")
+menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
     config.color.target_ball = color
     config.color.target_ball_output = cmm.color_menu_output(config.color.target_ball)
 end)
-menus.settings:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
+menus.settings_colors:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
     config.color.target_bounding_box = color
     config.color.target_bounding_box_output = cmm.color_menu_output(config.color.target_bounding_box)
 end)
-menus.settings:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
+menus.settings_colors:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
     config.color.options_circle = color
 end)
-menus.settings:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
+menus.settings_colors:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
     config.color.option_wedge = color
 end)
-menus.settings:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
+menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
     config.color.selected_option_wedge = color
 end)
-menus.settings:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
+menus.settings_colors:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
     config.color.line_to_target = color
 end)
 
