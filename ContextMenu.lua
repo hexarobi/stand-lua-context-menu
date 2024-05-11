@@ -903,26 +903,38 @@ menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing betwe
 end)
 
 menus.settings_colors = menus.settings:list("Colors")
-menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
-    config.color.target_ball = color
-    config.color.target_ball_output = cmm.color_menu_output(config.color.target_ball)
-end)
-menus.settings_colors:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
-    config.color.target_bounding_box = color
-    config.color.target_bounding_box_output = cmm.color_menu_output(config.color.target_bounding_box)
-end)
-menus.settings_colors:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
-    config.color.options_circle = color
-end)
-menus.settings_colors:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
-    config.color.option_wedge = color
-end)
-menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
-    config.color.selected_option_wedge = color
-end)
-menus.settings_colors:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
-    config.color.line_to_target = color
-end)
+menus.tball_colors = menus.settings_colors:list("Target Ball Color")
+menu.rainbow(
+    menus.tball_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
+        config.color.target_ball = color
+        config.color.target_ball_output = cmm.color_menu_output(config.color.target_ball)
+end))
+menus.tbounding_colors = menus.settings_colors:list("Target Bounding Box Color")
+menu.rainbow(
+    menus.tbounding_colors:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
+        config.color.target_bounding_box = color
+        config.color.target_bounding_box_output = cmm.color_menu_output(config.color.target_bounding_box)
+end))
+menus.circle_colors = menus.settings_colors:list("Menu Circle Color")
+menu.rainbow(
+    menus.circle_colors:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
+        config.color.options_circle = color
+end))
+menus.option_wedge_colors = menus.settings_colors:list("Option Wedge Color")
+menu.rainbow(
+    menus.option_wedge_colors:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
+        config.color.option_wedge = color
+end))
+menus.selected_wedge_colors = menus.settings_colors:list("Selected Option Wedge Color")
+menu.rainbow(
+    menus.selected_wedge_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
+        config.color.selected_option_wedge = color
+end))
+menus.tline_colors = menus.settings_colors:list("Line to Target Color")
+menu.rainbow(
+    menus.tline_colors:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
+        config.color.line_to_target = color
+end))
 
 ---
 --- About Menu
