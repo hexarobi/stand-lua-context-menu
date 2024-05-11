@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.11"
+local SCRIPT_VERSION = "0.12"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -68,7 +68,7 @@ local config = {
         selected_option_wedge={r=1, g=0, b=1, a=0.3},
         target_ball={r=1,g=0,b=1,a=0.8},
         target_bounding_box={r=1,g=0,b=1,a=1},
-        crosshair={r=1, g=1, b=1, a=0.5},
+        line_to_target={ r=1, g=1, b=1, a=0.5},
     },
     target_ball_size=0.4,
     selection_distance=1000.0,
@@ -180,7 +180,7 @@ local position_pointer = memory.alloc()
 
 cmm.draw_bounding_box = function(target, colour)
     if colour == nil then
-        colour = config.color.target_bounding_box
+        colour = config.color.target_bounding_box_output
     end
     if target.model_hash == nil then
         debug_log("Could not draw bounding box: No model hash set")
@@ -193,7 +193,7 @@ cmm.draw_bounding_box = function(target, colour)
     cmm.draw_bounding_box_with_dimensions(target.handle, colour, minimum_vec, maximum_vec)
 end
 
-cmm.draw_bounding_box_with_dimensions = function(entity, color, minimum_vec, maximum_vec)
+cmm.draw_bounding_box_with_dimensions = function(entity, colour, minimum_vec, maximum_vec)
 
     local dimensions = {x = maximum_vec.y - minimum_vec.y, y = maximum_vec.x - minimum_vec.x, z = maximum_vec.z - minimum_vec.z}
 
@@ -210,8 +210,6 @@ cmm.draw_bounding_box_with_dimensions = function(entity, color, minimum_vec, max
     local bottom_right =        {x = -up_vector.x * dimensions.z + top_right.x,             y = -up_vector.y * dimensions.z + top_right.y,              z = -up_vector.z * dimensions.z + top_right.z}
     local bottom_left =         {x = forward_vector.x * dimensions.y + bottom_left_back.x,  y = forward_vector.y * dimensions.y + bottom_left_back.y,   z = forward_vector.z * dimensions.y + bottom_left_back.z}
     local top_left_back =       {x = up_vector.x * dimensions.z + bottom_left_back.x,       y = up_vector.y * dimensions.z + bottom_left_back.y,        z = up_vector.z * dimensions.z + bottom_left_back.z}
-
-    local colour = {r=color.r*255, g=color.g*255, b=color.b*255, a=color.a*255}
 
     GRAPHICS.DRAW_LINE(
             top_right.x, top_right.y, top_right.z,
@@ -294,6 +292,17 @@ cmm.draw_text_with_shadow = function(posx, posy, text, alignment, scale, color, 
 
     directx.draw_text(posx, posy, text, alignment, scale, color, force_in_bounds)
 end
+
+cmm.color_menu_output = function(output_color)
+    return {
+        r=math.floor(output_color.r * 255),
+        g=math.floor(output_color.g * 255),
+        b=math.floor(output_color.b * 255),
+        a=math.floor(output_color.a * 255)
+    }
+end
+config.color.target_ball_output = cmm.color_menu_output(config.color.target_ball)
+config.color.target_bounding_box_output = cmm.color_menu_output(config.color.target_bounding_box)
 
 --------------------------
 -- RAYCAST
@@ -597,7 +606,7 @@ cmm.draw_options_menu = function(target)
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
 
     if target.screen_pos.x > 0 and target.screen_pos.y > 0 then
-        directx.draw_line(0.5, 0.5, target.screen_pos.x, target.screen_pos.y, config.color.crosshair)
+        directx.draw_line(0.5, 0.5, target.screen_pos.x, target.screen_pos.y, config.color.line_to_target)
     end
     --directx.draw_circle(target.cursor_pos.x, target.cursor_pos.y, 0.001, config.color.crosshair)
 
@@ -818,10 +827,10 @@ cmm.draw_selection = function(target)
         util.draw_sphere(
             target.pos,
             config.target_ball_size,
-            config.color.target_ball.r*255,
-            config.color.target_ball.g*255,
-            config.color.target_ball.b*255,
-            config.color.target_ball.a*255,
+            config.color.target_ball_output.r,
+            config.color.target_ball_output.g,
+            config.color.target_ball_output.b,
+            config.color.target_ball_output.a,
             40
         )
     else
@@ -882,17 +891,39 @@ end, config.show_target_name)
 menus.settings:toggle("Show Option Help", {}, "Should the selected option help text be displayed below the menu", function(value)
     config.show_option_help = value
 end, config.show_option_help)
-menus.settings:slider("Selection Distance", {}, "The range that the context menu can find clickable targets", 1, 2000, config.selection_distance, 10, function(value)
+menus.settings:slider("Selection Distance", {"cmmselectiondistance"}, "The range that the context menu can find clickable targets", 1, 2000, config.selection_distance, 10, function(value)
     config.selection_distance = value
 end)
-menus.settings:slider("Menu Radius", {}, "The size of the context menu disc", 5, 25, config.menu_radius * 100, 1, function(value)
+menus.settings:slider("Menu Radius", {"cmmmenuradius"}, "The size of the context menu disc", 5, 25, config.menu_radius * 100, 1, function(value)
     config.menu_radius = value / 100
 end)
-menus.settings:slider("Deadzone", {}, "The center of the menu where no option is selected", 5, 30, config.option_wedge_deadzone * 100, 1, function(value)
+menus.settings:slider("Deadzone", {"cmmdeadzone"}, "The center of the menu where no option is selected", 5, 30, config.option_wedge_deadzone * 100, 1, function(value)
     config.option_wedge_deadzone = value / 100
 end)
-menus.settings:slider("Option Padding", {}, "The spacing between options", 0, 25, config.option_wedge_padding * 100, 1, function(value)
+menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing between options", 0, 25, config.option_wedge_padding * 100, 1, function(value)
     config.option_wedge_padding = value / 100
+end)
+
+menus.settings:divider("Colors")
+menus.settings:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
+    config.color.target_ball = color
+    config.color.target_ball_output = cmm.color_menu_output(config.color.target_ball)
+end)
+menus.settings:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
+    config.color.target_bounding_box = color
+    config.color.target_bounding_box_output = cmm.color_menu_output(config.color.target_bounding_box)
+end)
+menus.settings:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
+    config.color.options_circle = color
+end)
+menus.settings:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
+    config.color.option_wedge = color
+end)
+menus.settings:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
+    config.color.selected_option_wedge = color
+end)
+menus.settings:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
+    config.color.line_to_target = color
 end)
 
 ---
