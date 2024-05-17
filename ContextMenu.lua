@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.14"
+local SCRIPT_VERSION = "0.15"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -56,6 +56,7 @@ util.require_natives("3095a")
 
 util.ensure_package_is_installed('lua/inspect')
 local inspect = require("inspect")
+local constants = require("context_menu/constants")
 
 local config = {
     debug_mode = false,
@@ -117,10 +118,13 @@ cmm.context_menu_draw_tick = function()
 
     if target ~= nil and target.pos ~= nil then
         cmm.draw_selection(target)
-        if PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
+        if PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, 25) then
             cmm.open_options_menu(target)
-        else
+        elseif not PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
             cmm.close_options_menu(target)
+        end
+        if state.is_menu_open then
+            cmm.update_menu(target)
         end
     end
 
@@ -162,6 +166,7 @@ cmm.refresh_menu_options_from_files = function(directory, path)
             if ext == "lua" or ext == "pluto" then
                 local menu_option = require(config.menu_options_scripts_dir..path.."/"..filename)
                 menu_option.filename = filename.."."..ext
+                menu_option.filepath = filepath
                 --debug_log("Loading menu option "..config.menu_options_scripts_dir..path.."/"..filename..": "..inspect(menu_option))
                 --cc.expand_chat_command_defaults(command, filename, path)
                 cmm.add_context_menu_option(menu_option)
@@ -563,6 +568,17 @@ cmm.handle_inputs = function(target)
     end
 end
 
+cmm.check_option_hotkeys = function(target)
+    for option_index, option in target.relevant_options do
+        local hotkey = option.hotkey
+        if constants.hotkey_map[hotkey] ~= nil then hotkey = constants.hotkey_map[hotkey] end
+        if hotkey ~= nil and util.is_key_down(hotkey) then
+            target.selected_option = option
+            cmm.execute_selected_action(target)
+        end
+    end
+end
+
 cmm.find_selected_option = function(target)
     for option_index, option in target.relevant_options do
         if is_point_in_polygon(target.cursor_pos.x, target.cursor_pos.y, option.vertices) then
@@ -634,10 +650,15 @@ cmm.draw_options_menu = function(target)
 
             if config.show_option_help and target.selected_option == option then
                 cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9), option.help, 5, 0.5, config.color.help_text, true)
+                if option.hotkey then
+                    cmm.draw_text_with_shadow(
+                        target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9) + 0.02,
+                        "Hotkey: "..option.hotkey, 5, 0.5, config.color.help_text, true
+                    )
+                end
             end
         end
     end
-
 end
 
 local function is_menu_option_relevant(menu_option, target)
@@ -798,6 +819,7 @@ end
 
 cmm.update_menu = function(target)
     cmm.handle_inputs(target)
+    cmm.check_option_hotkeys(target)
     cmm.find_selected_option(target)
     cmm.draw_options_menu(target)
 end
@@ -811,12 +833,10 @@ cmm.open_options_menu = function(target)
         -- Re-opening the menu while a trigger is executing cancels the trigger
         if target.selected_option then target.selected_option.ticks_shown = nil end
     end
-    cmm.update_menu(target)
 end
 
 cmm.close_options_menu = function(target)
     if state.is_menu_open then
-        cmm.update_menu(target)
         cmm.trigger_selected_action(target)
     end
     if not target.selected_option then
@@ -872,6 +892,7 @@ local function build_menu_option_description(menu_option)
     local text = menu_option.help or ""
     if menu_option.author then text = text.."\nAuthor: "..menu_option.author end
     if menu_option.filename then text = text.."\nFilename: "..menu_option.filename end
+    if menu_option.filepath then text = text.."\nFilepath: "..menu_option.filepath end
     return text
 end
 
