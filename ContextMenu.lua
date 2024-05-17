@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.12"
+local SCRIPT_VERSION = "0.14"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -60,6 +60,7 @@ local inspect = require("inspect")
 local config = {
     debug_mode = false,
     context_menu_enabled=true,
+    only_enable_when_disarmed=true,
     color = {
         options_circle={r=1, g=1, b=1, a=0.1},
         option_text={r=1, g=1, b=1, a=1},
@@ -89,12 +90,18 @@ local function debug_log(text)
     util.log("[ContextMenuManager] "..text)
 end
 
+cmm.is_menu_available = function()
+    if not config.context_menu_enabled then return false end
+    if config.only_enable_when_disarmed and WEAPON.IS_PED_ARMED(players.user_ped(), 7) then return false end
+    return true
+end
+
 ---
 --- Main Menu Draw Tick
 ---
 
 cmm.context_menu_draw_tick = function()
-    if not config.context_menu_enabled then return true end
+    if not cmm.is_menu_available() then return true end
     local target = state.current_target
 
     PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
@@ -880,6 +887,9 @@ end
 ---
 
 menus.settings = menu.my_root():list("Settings", {}, "Configuration options for this script.")
+menus.settings:toggle("Only Enable when Unarmed", {}, "Only display the context menu when you are not holding a weapon", function(value)
+    config.only_enable_when_disarmed = value
+end, config.only_enable_when_disarmed)
 menus.settings:toggle("Show Target Name", {}, "Should the target model name be displayed above the menu", function(value)
     config.show_target_name = value
 end, config.show_target_name)
