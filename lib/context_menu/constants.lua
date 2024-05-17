@@ -1,6 +1,20 @@
--- ChatCommander Constants
+-- ContextMenu Constants
 
 local constants = {
+
+    hotkey_map = {
+        BACKSPACE=0x08,
+        TAB=0x09,
+        RETURN=0X0D,
+        SHIFT=0x10,
+        CONTROL=0x11,
+        ALT=0x12,
+        ESC=0x1B,
+        SPACE=0x20,
+        INSERT=0x2D,
+        DEL=0x2E,
+        HELP=0x2F,
+    },
 
     spawn_aliases = {
         ["airportbus"]="airbus",
