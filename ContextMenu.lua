@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.16.1"
+local SCRIPT_VERSION = "0.17"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -75,7 +75,7 @@ local config = {
     target_ball_size=0.4,
     selection_distance=1000.0,
     menu_radius=0.1,
-    option_label_distance=0.6,
+    option_label_distance=0.7,
     option_wedge_deadzone=0.2,
     option_wedge_padding=0.0,
     menu_release_delay=3,
@@ -951,26 +951,26 @@ menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing betwe
 end)
 
 menus.settings_colors = menus.settings:list("Colors")
-menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
+menu.inline_rainbow(menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
     config.color.target_ball = color
     config.color.target_ball_output = cmm.color_menu_output(config.color.target_ball)
-end)
-menus.settings_colors:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Target Bounding Box Color", {"cmmcolortargetboundingbox"}, "The bounding box cursor when a specific entity is selected", config.color.target_bounding_box, true, function(color)
     config.color.target_bounding_box = color
     config.color.target_bounding_box_output = cmm.color_menu_output(config.color.target_bounding_box)
-end)
-menus.settings_colors:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Menu Circle Color", {"cmmcolorcirclecolor"}, "The menu circle color", config.color.options_circle, true, function(color)
     config.color.options_circle = color
-end)
-menus.settings_colors:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
     config.color.option_wedge = color
-end)
-menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
     config.color.selected_option_wedge = color
-end)
-menus.settings_colors:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
     config.color.line_to_target = color
-end)
+end))
 
 ---
 --- About Menu
