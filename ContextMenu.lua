@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.16"
+local SCRIPT_VERSION = "0.16.1"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -526,7 +526,7 @@ local function get_controls_angle_magnitude()
         y=PAD.GET_CONTROL_NORMAL(0, 12),
     }
     local magnitude = math.sqrt(mouse_movement.x ^ 2 + mouse_movement.y ^ 2)
-    local angle = math.deg(math.atan(mouse_movement.y, mouse_movement.x))
+    local angle = normalize_angle(math.deg(math.atan(mouse_movement.y, mouse_movement.x)))
     return angle, magnitude
 end
 
@@ -557,6 +557,7 @@ cmm.handle_inputs = function(target)
     PAD.DISABLE_CONTROL_ACTION(0, 2, false) --y
     target.cursor_pos = nil
     target.cursor_angle = nil
+    target.cursor_angle_magnitude = nil
     if PAD.IS_USING_KEYBOARD_AND_MOUSE(1) then
         HUD.SET_MOUSE_CURSOR_THIS_FRAME()
         HUD.SET_MOUSE_CURSOR_STYLE(1)
@@ -566,11 +567,8 @@ cmm.handle_inputs = function(target)
         }
     else
         local angle, magnitude = get_controls_angle_magnitude()
-        if magnitude > 0.1 then
-            target.cursor_angle = angle
-            --target.cursor_pos = get_circle_coords(target.screen_pos, config.menu_radius*0.5, angle)
-        end
-        -- TODO: controller work
+        target.cursor_angle = angle
+        target.cursor_angle_magnitude = magnitude
     end
 end
 
@@ -586,7 +584,6 @@ cmm.check_option_hotkeys = function(target)
 end
 
 cmm.find_selected_option = function(target)
-    target.selected_option = nil
     for option_index, option in target.relevant_options do
         if target.cursor_pos then
             if is_point_in_polygon(target.cursor_pos.x, target.cursor_pos.y, option.vertices) then
@@ -600,10 +597,12 @@ cmm.find_selected_option = function(target)
             local first_point_angle = option.point_angles[1]
             local last_point_angle = option.point_angles[#option.point_angles]
             local is_option_pointed_at = is_angle_between(target.cursor_angle, first_point_angle, last_point_angle)
-            if is_option_pointed_at then
-                target.selected_option = option
-            elseif target.selected_option == option and (not is_option_pointed_at) then
-                target.selected_option = nil
+            if target.cursor_angle_magnitude > 0.2 then
+                if is_option_pointed_at and target.cursor_angle_magnitude > 0.8 then
+                    target.selected_option = option
+                elseif target.selected_option == option and (not is_option_pointed_at) then
+                    target.selected_option = nil
+                end
             end
         end
     end
