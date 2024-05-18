@@ -1,8 +1,8 @@
 -- Vehicle Utils
 
 local constants = require("context_menu/constants")
-
 local vehicle_utils = {}
+local CONSTRUCTS_DIR = filesystem.stand_dir() .. 'Constructs\\ContextMenu Saves'
 
 vehicle_utils.spawn_vehicle_at_position = function(model_name, position, heading)
     if model_name == nil or type(model_name) ~= "string" then return nil end
@@ -100,24 +100,23 @@ vehicle_utils.require_constructor_lib = function()
     return constructor_lib
 end
 
-vehicle_utils.create_construct_from_vehicle = function(vehicle_handle)
+vehicle_utils.create_construct_from_handle = function(handle)
     local constructor_lib = vehicle_utils.require_constructor_lib()
     if not constructor_lib then return end
-    local construct = constructor_lib.copy_construct_plan(constructor_lib.construct_base)
-    construct.type = "VEHICLE"
-    construct.handle = vehicle_handle
-    constructor_lib.default_entity_attributes(construct)
-    constructor_lib.serialize_vehicle_attributes(construct)
-    return construct
+    return constructor_lib.create_construct_from_handle(handle)
 end
 
-vehicle_utils.spawn_construct_at_position = function(construct, position, heading)
+vehicle_utils.save_construct = function(construct)
     local constructor_lib = vehicle_utils.require_constructor_lib()
     if not constructor_lib then return end
-    if type(construct) ~= "table" then error("Construct must be a table") end
-    if construct.model == nil then error("Construct must have a model") end
-    construct.handle = vehicle_utils.spawn_vehicle_at_position(construct.model, position, heading)
-    constructor_lib.deserialize_vehicle_attributes(construct)
+    constructor_lib.default_attachment_attributes(construct)
+    return constructor_lib.save_construct(construct, CONSTRUCTS_DIR)
+end
+
+vehicle_utils.spawn_construct = function(construct)
+    local constructor_lib = vehicle_utils.require_constructor_lib()
+    if not constructor_lib then return end
+    constructor_lib.spawn_construct(construct)
 end
 
 vehicle_utils.spawn_construct_for_player = function(pid, construct)
@@ -134,7 +133,7 @@ vehicle_utils.apply_favorite_to_current_vehicle = function(pid, vehicle_handle)
     if not constructor_lib then return end
     local fav_vehicle = user_db.get_user_vehicle(pid)
     if fav_vehicle then
-        local construct = vehicle_utils.create_construct_from_vehicle(vehicle_handle)
+        local construct = vehicle_utils.create_construct_from_handle(vehicle_handle)
         construct.vehicle_attributes = fav_vehicle.vehicle_attributes
         constructor_lib.deserialize_vehicle_attributes(construct)
         return true
