@@ -21,6 +21,7 @@ return {
     name="Repair",
     help="Removes all damage and restores the vehicle to a driveable state",
     applicable_to={"VEHICLE"},
+    hotkey="R",
     execute=function(target)
         local vehicle = target.handle
         if entities.request_control(vehicle) then

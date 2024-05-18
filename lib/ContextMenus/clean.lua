@@ -48,7 +48,7 @@ return {
     name="Clean Up",
     help="Clear area of all vehicles, objects and peds by deleting them",
     applicable_to={"COORDS"},
-    hotkey="Backspace",
+    hotkey="BACKSPACE",
     execute=function(target)
         local num_deleted_objects = delete_entities_by_range(entities.get_all_objects_as_handles(), target.pos, 10)
         local num_deleted_peds = delete_entities_by_range(entities.get_all_peds_as_handles(), target.pos, 10)
