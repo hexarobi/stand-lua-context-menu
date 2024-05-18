@@ -3,6 +3,7 @@
 local constants = require("context_menu/constants")
 local vehicle_utils = {}
 local CONSTRUCTS_DIR = filesystem.stand_dir() .. 'Constructs\\ContextMenu Saves\\'
+filesystem.mkdirs(CONSTRUCTS_DIR)
 
 vehicle_utils.spawn_vehicle_at_position = function(model_name, position, heading)
     if model_name == nil or type(model_name) ~= "string" then return nil end
