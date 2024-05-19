@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.18"
+local SCRIPT_VERSION = "0.18.1"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -106,6 +106,11 @@ cmm.is_menu_available = function()
     return true
 end
 
+local function round(num, numDecimalPlaces)
+    local mult = 10^(numDecimalPlaces or 0)
+    return math.floor(num * mult + 0.5) / mult
+end
+
 ---
 --- Main Menu Draw Tick
 ---
@@ -142,6 +147,16 @@ cmm.context_menu_draw_tick = function()
     return true
 end
 
+cmm.get_distance_from_player = function(target)
+    local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
+    if target.handle then
+        target.pos = ENTITY.GET_ENTITY_COORDS(target.handle, 1)
+        target.distance_from_player = SYSTEM.VDIST(player_pos.x, player_pos.y, player_pos.z, target.pos.x, target.pos.y, target.pos.z)
+    elseif target.pos then
+        target.distance_from_player = SYSTEM.VDIST(player_pos.x, player_pos.y, player_pos.z, target.pos.x, target.pos.y, target.pos.z)
+    end
+end
+
 local function check_handles_for_nearest_target(handles, result, max_distance)
     if max_distance == nil then max_distance = 9999999 end
     local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
@@ -175,7 +190,7 @@ cmm.find_nearest_target = function()
     check_handles_for_nearest_target(player_handles, result, config.target_player_distance)
     check_handles_for_nearest_target(entities.get_all_vehicles_as_handles(), result, config.target_vehicle_distance)
     check_handles_for_nearest_target(entities.get_all_peds_as_handles(), result, config.target_ped_distance)
-    check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance)
+    --check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance)
 
     if result.min_distance <= config.target_snap_distance then
         return cmm.build_target_from_handle(result.closest_target)
@@ -683,7 +698,12 @@ cmm.draw_options_menu = function(target)
     --end
 
     if config.show_target_name and target.name ~= nil then
-        cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), target.name, 5, 0.5, config.color.option_text, true)
+        local label = target.name
+        cmm.get_distance_from_player(target)
+        if target.distance_from_player then
+            label = label .. " [" .. round(target.distance_from_player, 2) .. "m]"
+        end
+        cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), label, 5, 0.5, config.color.option_text, true)
     end
 
     for option_index, option in target.relevant_options do
@@ -832,9 +852,9 @@ cmm.build_target_from_raycast_result = function(raycastResult)
 end
 
 cmm.get_raycast_target = function()
-    --local flag = TRACE_FLAG.VEHICLE | TRACE_FLAG.OBJECT | TRACE_FLAG.MOVER | TRACE_FLAG.PED | TRACE_FLAG.RAGDOLL
+    local flag = TRACE_FLAG.VEHICLE | TRACE_FLAG.OBJECT | TRACE_FLAG.MOVER | TRACE_FLAG.PED | TRACE_FLAG.RAGDOLL
     --local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects | TraceFlag.world
-    local flag = TRACE_FLAG.ALL
+    --local flag = TRACE_FLAG.ALL
     local raycastResult = get_raycast_result(config.selection_distance, flag)
     return cmm.build_target_from_raycast_result(raycastResult)
 end
@@ -913,7 +933,8 @@ end
 cmm.draw_pointer_line = function(target)
     cmm.refresh_screen_pos(target)
     local pos = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(players.user_ped(), 0.0, 0.0, 0.0)
-    if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(pos.x, pos.y, pos.z, pointx, pointy) then
+    if target.screen_pos.x ~= 0 and target.screen_pos.y ~= 0
+            and GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(pos.x, pos.y, pos.z, pointx, pointy) then
         local player_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
         directx.draw_line(player_pos.x, player_pos.y, target.screen_pos.x, target.screen_pos.y, config.color.target_bounding_box)
     end
