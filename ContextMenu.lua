@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.18.1"
+local SCRIPT_VERSION = "0.19"
 
 -- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
 local status, auto_updater = pcall(require, "auto-updater")
@@ -82,15 +82,29 @@ local config = {
         line_to_target={ r=1, g=1, b=1, a=0.5},
     },
     target_ball_size=0.4,
-    selection_distance=1000.0,
+    selection_distance=600.0,
     menu_radius=0.1,
     option_label_distance=0.7,
     option_wedge_deadzone=0.2,
     option_wedge_padding=0.0,
     menu_release_delay=3,
     show_target_name=true,
+    show_target_owner=true,
     show_option_help=true,
     menu_options_scripts_dir="lib/ContextMenus",
+    trace_flag_options = {
+        {name="All", value=511, enabled=false},
+        {name="World", value=1, enabled=true},
+        {name="Vehicle", value=2, enabled=true},
+        {name="Ped", value=4, enabled=true},
+        {name="Ragdoll", value=8, enabled=true},
+        {name="Object", value=16, enabled=true},
+        {name="Pickup", value=32, enabled=true},
+        {name="Glass", value=64, enabled=false},
+        {name="River", value=128, enabled=false},
+        {name="Foliage", value=256, enabled=false},
+    },
+    trace_flag_value=0,
 }
 
 local CONTEXT_MENUS_DIR = filesystem.scripts_dir()..config.menu_options_scripts_dir
@@ -161,16 +175,18 @@ local function check_handles_for_nearest_target(handles, result, max_distance)
     if max_distance == nil then max_distance = 9999999 end
     local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
     for _, handle in handles do
-        local entity_pos = ENTITY.GET_ENTITY_COORDS(handle, 1)
-        local distance_from_player = SYSTEM.VDIST(player_pos.x, player_pos.y, player_pos.z, entity_pos.x, entity_pos.y, entity_pos.z)
-        if distance_from_player < max_distance
-            and GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(entity_pos.x, entity_pos.y, entity_pos.z, pointx, pointy)
-        then
-            local screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
-            local dist = SYSTEM.VDIST(0.5, 0.5, 0.0, screen_pos.x, screen_pos.y, 0.0)
-            if dist < result.min_distance then
-                result.min_distance = dist
-                result.closest_target = handle
+        if handle ~= players.user_ped() then
+            local entity_pos = ENTITY.GET_ENTITY_COORDS(handle, 1)
+            local distance_from_player = SYSTEM.VDIST(player_pos.x, player_pos.y, player_pos.z, entity_pos.x, entity_pos.y, entity_pos.z)
+            if distance_from_player < max_distance
+                    and GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(entity_pos.x, entity_pos.y, entity_pos.z, pointx, pointy)
+            then
+                local screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
+                local dist = SYSTEM.VDIST(0.5, 0.5, 0.0, screen_pos.x, screen_pos.y, 0.0)
+                if dist < result.min_distance then
+                    result.min_distance = dist
+                    result.closest_target = handle
+                end
             end
         end
     end
@@ -404,19 +420,6 @@ local function get_offset_from_cam(dist)
     return offset
 end
 
-local TRACE_FLAG = {
-    MOVER = 1,
-    VEHICLE = 2,
-    PED = 4,
-    RAGDOLL = 8,
-    OBJECT = 16,
-    PICKUP = 32,
-    GLASS = 64,
-    RIVER = 128,
-    FOLIAGE = 256,
-    ALL = 511,
-}
-
 ---@class RaycastResult
 ---@field didHit boolean
 ---@field endCoords v3
@@ -428,7 +431,7 @@ local TRACE_FLAG = {
 ---@return RaycastResult
 local function get_raycast_result(dist, flag)
     local result = {}
-    flag = flag or TRACE_FLAG.ALL
+    flag = flag or 511 -- All=511
     local didHit = memory.alloc(1)
     local endCoords = v3.new()
     local normal = v3.new()
@@ -450,6 +453,18 @@ local function get_raycast_result(dist, flag)
     result.hitEntity = memory.read_int(hitEntity)
     return result
 end
+
+cmm.rebuild_trace_flag_value = function()
+    local flag = 0
+    for _, trace_flag_option in config.trace_flag_options do
+        if trace_flag_option.enabled then
+            local flag_value = trace_flag_option.value
+            flag = flag | flag_value
+        end
+    end
+    config.trace_flag_value = flag
+end
+cmm.rebuild_trace_flag_value()
 
 ---
 --- Polygon Utils
@@ -698,10 +713,13 @@ cmm.draw_options_menu = function(target)
     --end
 
     if config.show_target_name and target.name ~= nil then
-        local label = target.name
+        local label = target.type .. ": " .. target.name
+        if config.show_target_owner and target.owner and target.owner ~= target.name then
+            label = label .. " (" .. target.owner .. ")"
+        end
         cmm.get_distance_from_player(target)
         if target.distance_from_player then
-            label = label .. " [" .. round(target.distance_from_player, 2) .. "m]"
+            label = label .. " [" .. round(target.distance_from_player, 1) .. "m]"
         end
         cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), label, 5, 0.5, config.color.option_text, true)
     end
@@ -768,13 +786,20 @@ local function get_target_type(new_target)
     return entity_type
 end
 
+local function get_player_id_from_handle(handle)
+    for _, pid in players.list() do
+        local player_ped = PLAYER.GET_PLAYER_PED_SCRIPT_INDEX(pid)
+        if player_ped == handle then
+            return pid
+        end
+    end
+end
+
 local function get_target_name(target)
     if target.type == "PLAYER" then
-        for _, pid in players.list() do
-            local player_ped = PLAYER.GET_PLAYER_PED_SCRIPT_INDEX(pid)
-            if player_ped == target.handle then
-                return PLAYER.GET_PLAYER_NAME(pid)
-            end
+        local pid = get_player_id_from_handle(target.handle)
+        if pid then
+            return PLAYER.GET_PLAYER_NAME(pid)
         end
     elseif target.type == "VEHICLE" then
         return util.get_label_text(VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(target.model_hash))
@@ -782,8 +807,22 @@ local function get_target_name(target)
     return target.model
 end
 
+local function get_target_owner(target)
+    local owner_pid
+    if target.type == "PLAYER" then
+        owner_pid = get_player_id_from_handle(target.handle)
+    elseif target.handle and target.type ~= "WORLD_OBJECT" then
+        owner_pid = entities.get_owner(target.handle)
+    end
+    if owner_pid ~= nil and owner_pid > 0 then
+        return PLAYER.GET_PLAYER_NAME(owner_pid)
+    end
+end
+
 -- credit to the amazing aarroonn
 local function get_model_hash(handle_or_ptr)
+    --debug_log("Loading model hash for "..tostring(handle_or_ptr))
+    if handle_or_ptr == nil or handle_or_ptr == 0 then return end
     if handle_or_ptr < 0xFFFFFF then
         handle_or_ptr = entities.handle_to_pointer(handle_or_ptr)
     end
@@ -794,6 +833,7 @@ local function get_model_hash(handle_or_ptr)
 end
 
 cmm.build_target_from_handle = function(handle)
+    if not handle then return end
     local target = {}
     target.handle = handle
     target.model_hash = get_model_hash(target.handle)
@@ -802,6 +842,7 @@ cmm.build_target_from_handle = function(handle)
     end
     target.type = get_target_type(target)
     target.name = get_target_name(target)
+    target.owner = get_target_owner(target)
     target.pos = ENTITY.GET_ENTITY_COORDS(target.handle, true)
 
     target.menu_pos = { x=0.5, y=0.5, }
@@ -815,8 +856,8 @@ end
 cmm.build_target_from_position = function(position)
     local target = {}
     target.type = "COORDS"
-    target.pos = { x=position.x, y=position.y, z=position.z}
-    target.name = "Coords: "..string.format("%.2f", target.pos.x)..","..string.format("%.2f", target.pos.y)
+    target.pos = { x=round(position.x, 1), y=round(position.y, 1), z=round(position.z, 1)}
+    target.name = target.pos.x..","..target.pos.y
 
     target.menu_pos = { x=0.5, y=0.5, }
     cmm.build_relevant_options(target)
@@ -852,10 +893,7 @@ cmm.build_target_from_raycast_result = function(raycastResult)
 end
 
 cmm.get_raycast_target = function()
-    local flag = TRACE_FLAG.VEHICLE | TRACE_FLAG.OBJECT | TRACE_FLAG.MOVER | TRACE_FLAG.PED | TRACE_FLAG.RAGDOLL
-    --local flag = TraceFlag.peds | TraceFlag.vehicles | TraceFlag.pedsSimpleCollision | TraceFlag.objects | TraceFlag.world
-    --local flag = TRACE_FLAG.ALL
-    local raycastResult = get_raycast_result(config.selection_distance, flag)
+    local raycastResult = get_raycast_result(config.selection_distance, config.trace_flag_value)
     return cmm.build_target_from_raycast_result(raycastResult)
 end
 
@@ -1026,10 +1064,16 @@ end)
 menus.settings_target_distances:slider("Target Object Distance", {"cmmtargetobjectdistance"}, "The range that objects are targetable", 1, 5000, config.target_object_distance, 10, function(value)
     config.target_object_distance = value
 end)
+menus.settings_target_distances:slider("Target World Distance", {"cmmtargetworlddistance"}, "The range that world coords are targetable", 1, 600, config.selection_distance, 10, function(value)
+    config.selection_distance = value
+end)
 
 menus.settings:toggle("Show Target Name", {}, "Should the target model name be displayed above the menu", function(value)
     config.show_target_name = value
 end, config.show_target_name)
+menus.settings:toggle("Show Target Owner", {}, "Should the player that owns the object be displayed above the menu in paranthesis", function(value)
+    config.show_target_owner = value
+end, config.show_target_owner)
 menus.settings:toggle("Show Option Help", {}, "Should the selected option help text be displayed below the menu", function(value)
     config.show_option_help = value
 end, config.show_option_help)
@@ -1046,6 +1090,14 @@ end)
 menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing between options", 0, 25, config.option_wedge_padding * 100, 1, function(value)
     config.option_wedge_padding = value / 100
 end)
+
+menus.settings_trace_flags = menus.settings:list("Trace Flags", {}, "Set what kind of entities you can target")
+for _, trace_flag_option in config.trace_flag_options do
+    menus.settings_trace_flags:toggle(trace_flag_option.name, {}, "", function(value)
+        trace_flag_option.enabled = value
+        cmm.rebuild_trace_flag_value()
+    end, trace_flag_option.enabled)
+end
 
 menus.settings_colors = menus.settings:list("Colors")
 menu.inline_rainbow(menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
