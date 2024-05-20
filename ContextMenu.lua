@@ -2,44 +2,20 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.19"
-
--- Auto Updater from https://github.com/hexarobi/stand-lua-auto-updater
-local status, auto_updater = pcall(require, "auto-updater")
-if not status then
-    if not async_http.have_access() then
-        util.toast("Failed to install auto-updater. Internet access is disabled. To enable automatic updates, please stop the script then uncheck the `Disable Internet Access` option.")
-    else
-        local auto_update_complete = nil util.toast("Installing auto-updater...", TOAST_ALL)
-        async_http.init("raw.githubusercontent.com", "/hexarobi/stand-lua-auto-updater/main/auto-updater.lua",
-                function(raw_result, raw_headers, raw_status_code)
-                    local function parse_auto_update_result(result, headers, status_code)
-                        local error_prefix = "Error downloading auto-updater: "
-                        if status_code ~= 200 then util.toast(error_prefix..status_code, TOAST_ALL) return false end
-                        if not result or result == "" then util.toast(error_prefix.."Found empty file.", TOAST_ALL) return false end
-                        filesystem.mkdir(filesystem.scripts_dir() .. "lib")
-                        local file = io.open(filesystem.scripts_dir() .. "lib\\auto-updater.lua", "wb")
-                        if file == nil then util.toast(error_prefix.."Could not open file for writing.", TOAST_ALL) return false end
-                        file:write(result) file:close() util.toast("Successfully installed auto-updater lib", TOAST_ALL) return true
-                    end
-                    auto_update_complete = parse_auto_update_result(raw_result, raw_headers, raw_status_code)
-                end, function() util.toast("Error downloading auto-updater lib. Update failed to download.", TOAST_ALL) end)
-        async_http.dispatch() local i = 1 while (auto_update_complete == nil and i < 40) do util.yield(250) i = i + 1 end
-        if auto_update_complete == nil then error("Error downloading auto-updater lib. HTTP Request timeout") end
-        auto_updater = require("auto-updater")
-    end
-end
-if auto_updater == true then error("Invalid auto-updater lib. Please delete your Stand/Lua Scripts/lib/auto-updater.lua and try again") end
+local SCRIPT_VERSION = "0.20"
 
 ---
 --- Auto Updater
 ---
 
 local auto_update_config = {
-    --source_url="https://raw.githubusercontent.com/hexarobi/stand-lua-context-menu/main/ContextMenu.lua",
+    source_url="https://raw.githubusercontent.com/hexarobi/stand-lua-context-menu/main/ContextMenu.lua",
     script_relpath=SCRIPT_RELPATH,
     project_url="https://github.com/hexarobi/stand-lua-context-menu",
 }
+
+util.ensure_package_is_installed('lua/auto-updater')
+local auto_updater = require('auto-updater')
 if auto_updater == true then
     auto_updater.run_auto_update(auto_update_config)
 end
@@ -70,6 +46,12 @@ local config = {
     target_vehicle_distance=100,
     target_ped_distance=30,
     target_object_distance=10,
+    target_snap_distance={
+        player=0.09,
+        vehicle=0.04,
+        ped=0.02,
+        object=0.01,
+    },
     color = {
         options_circle={r=1, g=1, b=1, a=0.1},
         option_text={r=1, g=1, b=1, a=1},
@@ -171,7 +153,7 @@ cmm.get_distance_from_player = function(target)
     end
 end
 
-local function check_handles_for_nearest_target(handles, result, max_distance)
+local function check_handles_for_nearest_target(handles, result, max_distance, snap_distance)
     if max_distance == nil then max_distance = 9999999 end
     local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
     for _, handle in handles do
@@ -183,7 +165,7 @@ local function check_handles_for_nearest_target(handles, result, max_distance)
             then
                 local screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
                 local dist = SYSTEM.VDIST(0.5, 0.5, 0.0, screen_pos.x, screen_pos.y, 0.0)
-                if dist < result.min_distance then
+                if dist < snap_distance and dist < result.min_distance then
                     result.min_distance = dist
                     result.closest_target = handle
                 end
@@ -203,12 +185,12 @@ cmm.find_nearest_target = function()
         table.insert(player_handles, PLAYER.GET_PLAYER_PED_SCRIPT_INDEX(pid))
     end
 
-    check_handles_for_nearest_target(player_handles, result, config.target_player_distance)
-    check_handles_for_nearest_target(entities.get_all_vehicles_as_handles(), result, config.target_vehicle_distance)
-    check_handles_for_nearest_target(entities.get_all_peds_as_handles(), result, config.target_ped_distance)
-    --check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance)
+    check_handles_for_nearest_target(player_handles, result, config.target_player_distance, config.target_snap_distance.player)
+    check_handles_for_nearest_target(entities.get_all_vehicles_as_handles(), result, config.target_vehicle_distance, config.target_snap_distance.vehicle)
+    check_handles_for_nearest_target(entities.get_all_peds_as_handles(), result, config.target_ped_distance, config.target_snap_distance.ped)
+    check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance, config.target_snap_distance.object)
 
-    if result.min_distance <= config.target_snap_distance then
+    if result.closest_target then
         return cmm.build_target_from_handle(result.closest_target)
     end
 
@@ -822,10 +804,11 @@ end
 -- credit to the amazing aarroonn
 local function get_model_hash(handle_or_ptr)
     --debug_log("Loading model hash for "..tostring(handle_or_ptr))
-    if handle_or_ptr == nil or handle_or_ptr == 0 then return end
+    if handle_or_ptr == nil or not (handle_or_ptr > 0) then return end
     if handle_or_ptr < 0xFFFFFF then
         handle_or_ptr = entities.handle_to_pointer(handle_or_ptr)
     end
+    util.log("Attempting to load model hash for "..inspect(handle_or_ptr))
     local model_info = memory.read_long(handle_or_ptr + 0x20)
     if model_info ~= 0 then
         return memory.read_int(model_info + 0x18)
@@ -1047,11 +1030,23 @@ menus.settings:toggle("Only Enable when Unarmed", {}, "Only display the context 
     config.only_enable_when_disarmed = value
 end, config.only_enable_when_disarmed)
 
-menus.settings:slider_float("Target Snap Distance", {"cmmsnapdistance"}, "How close your crosshair needs to be to an entity to snap to it", 0, 100, math.floor(config.target_snap_distance * 100), 1, function(value)
-config.target_snap_distance = value / 100
+menus.settings:divider("Targeting")
+
+menus.settings_snap_distance = menus.settings:list("Snap Distance", {}, "How close your crosshair needs to be to an entity to snap to it")
+menus.settings_snap_distance:slider_float("Player Snap Distance", {"cmmsnapdistanceplayer"}, "How close your crosshair needs to be to a player to snap to it", 0, 100, math.floor(config.target_snap_distance.player * 100), 1, function(value)
+    config.target_snap_distance.player = value / 100
+end)
+menus.settings_snap_distance:slider_float("Vehicle Snap Distance", {"cmmsnapdistancevehicle"}, "How close your crosshair needs to be to a vehicle to snap to it", 0, 100, math.floor(config.target_snap_distance.vehicle * 100), 1, function(value)
+    config.target_snap_distance.vehicle = value / 100
+end)
+menus.settings_snap_distance:slider_float("Ped Snap Distance", {"cmmsnapdistanceped"}, "How close your crosshair needs to be to a ped to snap to it", 0, 100, math.floor(config.target_snap_distance.ped * 100), 1, function(value)
+    config.target_snap_distance.ped = value / 100
+end)
+menus.settings_snap_distance:slider_float("Object Snap Distance", {"cmmsnapdistanceobject"}, "How close your crosshair needs to be to a object to snap to it", 0, 100, math.floor(config.target_snap_distance.object * 100), 1, function(value)
+    config.target_snap_distance.object = value / 100
 end)
 
-menus.settings_target_distances = menus.settings:list("Target Distances", {}, "Configure targeting distances for various kinds of entities.")
+menus.settings_target_distances = menus.settings:list("Target Distances", {}, "How far away an entity can be and still be targeted.")
 menus.settings_target_distances:slider("Target Player Distance", {"cmmtargetplayerdistance"}, "The range that other players are targetable", 1, 5000, config.target_player_distance, 10, function(value)
     config.target_player_distance = value
 end)
@@ -1068,13 +1063,24 @@ menus.settings_target_distances:slider("Target World Distance", {"cmmtargetworld
     config.selection_distance = value
 end)
 
-menus.settings:toggle("Show Target Name", {}, "Should the target model name be displayed above the menu", function(value)
+menus.settings_trace_flags = menus.settings:list("Trace Flags", {}, "Set what kind of entities you can target")
+for _, trace_flag_option in config.trace_flag_options do
+    menus.settings_trace_flags:toggle(trace_flag_option.name, {}, "", function(value)
+        trace_flag_option.enabled = value
+        cmm.rebuild_trace_flag_value()
+    end, trace_flag_option.enabled)
+end
+
+menus.settings:divider("Display")
+
+menus.settings_show_target_texts = menus.settings:list("Show Target Texts", {}, "Show various text options on target")
+menus.settings_show_target_texts:toggle("Show Target Name", {}, "Should the target model name be displayed above the menu", function(value)
     config.show_target_name = value
 end, config.show_target_name)
-menus.settings:toggle("Show Target Owner", {}, "Should the player that owns the object be displayed above the menu in paranthesis", function(value)
+menus.settings_show_target_texts:toggle("Show Target Owner", {}, "Should the player that owns the object be displayed above the menu in paranthesis", function(value)
     config.show_target_owner = value
 end, config.show_target_owner)
-menus.settings:toggle("Show Option Help", {}, "Should the selected option help text be displayed below the menu", function(value)
+menus.settings_show_target_texts:toggle("Show Option Help", {}, "Should the selected option help text be displayed below the menu", function(value)
     config.show_option_help = value
 end, config.show_option_help)
 
@@ -1090,14 +1096,6 @@ end)
 menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing between options", 0, 25, config.option_wedge_padding * 100, 1, function(value)
     config.option_wedge_padding = value / 100
 end)
-
-menus.settings_trace_flags = menus.settings:list("Trace Flags", {}, "Set what kind of entities you can target")
-for _, trace_flag_option in config.trace_flag_options do
-    menus.settings_trace_flags:toggle(trace_flag_option.name, {}, "", function(value)
-        trace_flag_option.enabled = value
-        cmm.rebuild_trace_flag_value()
-    end, trace_flag_option.enabled)
-end
 
 menus.settings_colors = menus.settings:list("Colors")
 menu.inline_rainbow(menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
