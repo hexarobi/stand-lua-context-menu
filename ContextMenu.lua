@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.20"
+local SCRIPT_VERSION = "0.20.1"
 
 ---
 --- Auto Updater
@@ -808,6 +808,7 @@ local function get_model_hash(handle_or_ptr)
     if handle_or_ptr < 0xFFFFFF then
         handle_or_ptr = entities.handle_to_pointer(handle_or_ptr)
     end
+    if handle_or_ptr == nil or not (handle_or_ptr > 0) then return end
     util.log("Attempting to load model hash for "..inspect(handle_or_ptr))
     local model_info = memory.read_long(handle_or_ptr + 0x20)
     if model_info ~= 0 then
