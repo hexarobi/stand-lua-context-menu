@@ -7,7 +7,7 @@ local inspect = require("inspect")
 return {
     name="Copy",
     help="Copy entity to clipboard, for later pasting",
-    applicable_to={"VEHICLE", "OBJECT", "PED", "WORLD_OBJECT"},
+    applicable_to={"VEHICLE", "OBJECT", "PED", "WORLD_OBJECT", "PLAYER"},
     hotkey="C",
     execute=function(target)
         state.clipboard_construct = vehicle_utils.create_construct_from_handle(target.handle)

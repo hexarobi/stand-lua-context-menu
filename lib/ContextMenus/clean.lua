@@ -54,6 +54,5 @@ return {
         local num_deleted_peds = delete_entities_by_range(entities.get_all_peds_as_handles(), target.pos, 10)
         local num_deleted_vehicles = delete_entities_by_range(entities.get_all_vehicles_as_handles(), target.pos, 10)
         util.toast("Deleted "..num_deleted_vehicles.." vehicles")
-
     end
 }
