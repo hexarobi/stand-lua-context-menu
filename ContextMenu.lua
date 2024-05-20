@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.20.1"
+local SCRIPT_VERSION = "0.20.2"
 
 ---
 --- Auto Updater
@@ -805,12 +805,18 @@ end
 local function get_model_hash(handle_or_ptr)
     --debug_log("Loading model hash for "..tostring(handle_or_ptr))
     if handle_or_ptr == nil or not (handle_or_ptr > 0) then return end
+    local pointer = handle_or_ptr
     if handle_or_ptr < 0xFFFFFF then
-        handle_or_ptr = entities.handle_to_pointer(handle_or_ptr)
+        pointer = entities.handle_to_pointer(handle_or_ptr)
     end
-    if handle_or_ptr == nil or not (handle_or_ptr > 0) then return end
-    util.log("Attempting to load model hash for "..inspect(handle_or_ptr))
-    local model_info = memory.read_long(handle_or_ptr + 0x20)
+    if pointer == nil or not (pointer > 0) then return end
+    --util.log("Attempting to load model hash Handle: "..handle_or_ptr.." Pointer:"..pointer)
+    local status, model_info = pcall(memory.read_long, pointer + 0x20)
+    if not status then
+        util.toast("Warning: Access Violation for Handle: "..handle_or_ptr.." Pointer:"..pointer, TOAST_ALL)
+        return
+    end
+    --local model_info = memory.read_long(handle_or_ptr + 0x20)
     if model_info ~= 0 then
         return memory.read_int(model_info + 0x18)
     end
