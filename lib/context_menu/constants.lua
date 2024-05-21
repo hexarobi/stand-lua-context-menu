@@ -16,6 +16,19 @@ local constants = {
         HELP=0x2F,
     },
 
+    TRACE_FLAG = {
+        WORLD = 1,
+        VEHICLE = 2,
+        PED = 4,
+        RAGDOLL = 8,
+        OBJECT = 16,
+        PICKUP = 32,
+        GLASS = 64,
+        RIVER = 128,
+        FOLIAGE = 256,
+        ALL = 511,
+    },
+
     spawn_aliases = {
         ["airportbus"]="airbus",
         ["ro86alkonost"]="alkonost",
