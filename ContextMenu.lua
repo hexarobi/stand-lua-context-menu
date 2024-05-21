@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.21.1"
+local SCRIPT_VERSION = "0.22"
 
 ---
 --- Auto Updater
@@ -12,6 +12,25 @@ local auto_update_config = {
     source_url="https://raw.githubusercontent.com/hexarobi/stand-lua-context-menu/main/ContextMenu.lua",
     script_relpath=SCRIPT_RELPATH,
     project_url="https://github.com/hexarobi/stand-lua-context-menu",
+    branch="main",
+    dependencies={
+        "lib/context_menu/constants.lua",
+        "lib/context_menu/shared_state.lua",
+        "lib/context_menu/vehicle_utils.lua",
+        -- ContextMenu Options
+        "lib/ContextMenus/clean.lua",
+        "lib/ContextMenus/copy.lua",
+        "lib/ContextMenus/dance.lua",
+        "lib/ContextMenus/destroy.lua",
+        "lib/ContextMenus/enter.lua",
+        "lib/ContextMenus/flip.lua",
+        "lib/ContextMenus/paste.lua",
+        "lib/ContextMenus/player_menu.lua",
+        "lib/ContextMenus/repair.lua",
+        "lib/ContextMenus/save.lua",
+        "lib/ContextMenus/spawn.lua",
+        "lib/ContextMenus/teleport.lua",
+    },
 }
 
 util.ensure_package_is_installed('lua/auto-updater')
@@ -924,7 +943,7 @@ end
 cmm.build_target_from_raycast_result = function(raycastResult)
     local model_hash
     if raycastResult.didHit then
-        util.log("Loading model hash: "..raycastResult.hitEntity)
+        --util.log("Loading model hash from raycast: "..raycastResult.hitEntity)
         -- Aaron's model hash function works for WORLD OBJECTs that dont normally return an entity type
         -- but sometimes causes memory ACCESS_VIOLATION errors
         if config.use_aarons_model_hash then
@@ -969,6 +988,7 @@ cmm.get_raycast_target = function()
 end
 
 cmm.refresh_screen_pos = function(target)
+    if not target then return end
     if target.handle then
         target.pos = ENTITY.GET_ENTITY_COORDS(target.handle, true)
     end
@@ -1107,9 +1127,18 @@ end
 
 menus.menu_options:divider("Menu Options")
 for _, menu_option in cmm.menu_options do
-    menus.menu_options:toggle(menu_option.name, {}, build_menu_option_description(menu_option), function(value)
+    menu_option.menu = menus.menu_options:list(menu_option.name, {}, "Configuration options for this specific menu option")
+    menu_option.menu:toggle("Enabled", {}, "Enabled options will show up in menu", function(value)
         menu_option.enabled = value
     end, menu_option.enabled)
+    menu_option.menu:text_input("Hotkey", {"cmmhotkey"}, "Press this key while the menu is open to select this option", function(value)
+        menu_option.hotkey = value
+    end, menu_option.hotkey or "")
+    -- build_menu_option_description(menu_option)
+    if menu_option.config_menu ~= nil then
+        menu_option.menu:divider("Config")
+        menu_option.config_menu(menu_option.menu)
+    end
 end
 
 ---
