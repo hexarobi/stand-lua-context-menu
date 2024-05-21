@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.21"
+local SCRIPT_VERSION = "0.21.1"
 
 ---
 --- Auto Updater
@@ -207,7 +207,7 @@ local function check_pointers_for_closest_target(pointers, result, max_distance,
     local player_pointer = entities.handle_to_pointer(players.user_ped())
     if result.closest_target.screen_distance == nil then result.closest_target.screen_distance = 9999999 end
     for _, pointer in pointers do
-        local target = build_pointer_target(pointer, max_distance)
+        local target = build_pointer_target(pointer)
         if pointer ~= player_pointer
             and target.distance_from_player < max_distance
             and target.screen_distance ~= nil
@@ -871,7 +871,7 @@ local function get_model_hash(handle_or_ptr)
             return
         end
     else
-        util.log("Reading model hash Handle: "..handle_or_ptr.." Pointer:"..pointer, TOAST_ALL)
+        --util.log("Reading model hash Handle: "..handle_or_ptr.." Pointer:"..pointer, TOAST_ALL)
         model_info = memory.read_long(pointer + 0x20)
     end
     if model_info ~= 0 then
