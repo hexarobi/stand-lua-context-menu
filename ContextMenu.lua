@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.20.2"
+local SCRIPT_VERSION = "0.21"
 
 ---
 --- Auto Updater
@@ -41,7 +41,8 @@ local config = {
     debug_mode = false,
     context_menu_enabled=true,
     only_enable_when_disarmed=true,
-    target_snap_distance=0.09,
+    use_aarons_model_hash=true,
+    wrap_read_model_with_pcall=false,
     target_player_distance=2000,
     target_vehicle_distance=100,
     target_ped_distance=30,
@@ -66,7 +67,7 @@ local config = {
     target_ball_size=0.4,
     selection_distance=600.0,
     menu_radius=0.1,
-    option_label_distance=0.7,
+    option_label_distance=0.6,
     option_wedge_deadzone=0.2,
     option_wedge_padding=0.0,
     menu_release_delay=3,
@@ -75,7 +76,7 @@ local config = {
     show_option_help=true,
     menu_options_scripts_dir="lib/ContextMenus",
     trace_flag_options = {
-        {name="All", value=511, enabled=false},
+        --{name="All", value=511, enabled=false},
         {name="World", value=1, enabled=true},
         {name="Vehicle", value=2, enabled=true},
         {name="Ped", value=4, enabled=true},
@@ -84,7 +85,7 @@ local config = {
         {name="Pickup", value=32, enabled=true},
         {name="Glass", value=64, enabled=false},
         {name="River", value=128, enabled=false},
-        {name="Foliage", value=256, enabled=false},
+        {name="Foliage", value=256, enabled=true},
     },
     trace_flag_value=0,
 }
@@ -153,23 +154,67 @@ cmm.get_distance_from_player = function(target)
     end
 end
 
+local function expand_target_screen_pos(target)
+    local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
+    target.distance_from_player = SYSTEM.VDIST(
+        player_pos.x, player_pos.y, player_pos.z,
+        target.position.x, target.position.y, target.position.z
+    )
+    if GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(target.position.x, target.position.y, target.position.z, pointx, pointy) then
+        target.screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
+        target.screen_distance = SYSTEM.VDIST(0.5, 0.5, 0.0, target.screen_pos.x, target.screen_pos.y, 0.0)
+    end
+end
+
+local function build_handle_target(handle)
+    local target = {
+        handle=handle,
+        position=ENTITY.GET_ENTITY_COORDS(handle),
+    }
+    expand_target_screen_pos(target)
+    return target
+end
+
 local function check_handles_for_nearest_target(handles, result, max_distance, snap_distance)
     if max_distance == nil then max_distance = 9999999 end
-    local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
     for _, handle in handles do
         if handle ~= players.user_ped() then
-            local entity_pos = ENTITY.GET_ENTITY_COORDS(handle, 1)
-            local distance_from_player = SYSTEM.VDIST(player_pos.x, player_pos.y, player_pos.z, entity_pos.x, entity_pos.y, entity_pos.z)
-            if distance_from_player < max_distance
-                    and GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(entity_pos.x, entity_pos.y, entity_pos.z, pointx, pointy)
+            local target = build_handle_target(handle)
+            if target.distance_from_player < max_distance
+                and target.screen_distance ~= nil
+                and target.screen_distance < snap_distance
+                and (
+                    result.closest_target.screen_distance == nil
+                    or target.screen_distance < result.closest_target.screen_distance
+                )
             then
-                local screen_pos = { x=memory.read_float(pointx), y=memory.read_float(pointy)}
-                local dist = SYSTEM.VDIST(0.5, 0.5, 0.0, screen_pos.x, screen_pos.y, 0.0)
-                if dist < snap_distance and dist < result.min_distance then
-                    result.min_distance = dist
-                    result.closest_target = handle
-                end
+                result.closest_target = target
             end
+        end
+    end
+end
+
+local function build_pointer_target(pointer)
+    local target = {
+        pointer=pointer,
+        position=entities.get_position(pointer),
+    }
+    expand_target_screen_pos(target)
+    return target
+end
+
+local function check_pointers_for_closest_target(pointers, result, max_distance, max_screen_distance)
+    local player_pointer = entities.handle_to_pointer(players.user_ped())
+    if result.closest_target.screen_distance == nil then result.closest_target.screen_distance = 9999999 end
+    for _, pointer in pointers do
+        local target = build_pointer_target(pointer, max_distance)
+        if pointer ~= player_pointer
+            and target.distance_from_player < max_distance
+            and target.screen_distance ~= nil
+            and target.screen_distance < max_screen_distance
+            and target.screen_distance < result.closest_target.screen_distance
+        then
+            result.closest_target = target
         end
     end
 end
@@ -177,7 +222,7 @@ end
 cmm.find_nearest_target = function()
     local result = {
         min_distance = 9999,
-        closest_target = nil
+        closest_target = {}
     }
 
     local player_handles = {}
@@ -186,12 +231,20 @@ cmm.find_nearest_target = function()
     end
 
     check_handles_for_nearest_target(player_handles, result, config.target_player_distance, config.target_snap_distance.player)
-    check_handles_for_nearest_target(entities.get_all_vehicles_as_handles(), result, config.target_vehicle_distance, config.target_snap_distance.vehicle)
-    check_handles_for_nearest_target(entities.get_all_peds_as_handles(), result, config.target_ped_distance, config.target_snap_distance.ped)
-    check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance, config.target_snap_distance.object)
+    --check_handles_for_nearest_target(entities.get_all_vehicles_as_handles(), result, config.target_vehicle_distance, config.target_snap_distance.vehicle)
+    --check_handles_for_nearest_target(entities.get_all_peds_as_handles(), result, config.target_ped_distance, config.target_snap_distance.ped)
+    --check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance, config.target_snap_distance.object)
 
-    if result.closest_target then
-        return cmm.build_target_from_handle(result.closest_target)
+    check_pointers_for_closest_target(entities.get_all_vehicles_as_pointers(), result, config.target_vehicle_distance, config.target_snap_distance.vehicle)
+    check_pointers_for_closest_target(entities.get_all_peds_as_pointers(), result, config.target_ped_distance, config.target_snap_distance.ped)
+    check_pointers_for_closest_target(entities.get_all_objects_as_pointers(), result, config.target_object_distance, config.target_snap_distance.object)
+
+    if result.closest_target.pointer then
+        result.closest_target.handle = entities.pointer_to_handle(result.closest_target.pointer)
+    end
+    if result.closest_target.handle then
+        cmm.expand_target_model(result.closest_target)
+        return result.closest_target
     end
 
     return cmm.get_raycast_target()
@@ -810,23 +863,30 @@ local function get_model_hash(handle_or_ptr)
         pointer = entities.handle_to_pointer(handle_or_ptr)
     end
     if pointer == nil or not (pointer > 0) then return end
-    --util.log("Attempting to load model hash Handle: "..handle_or_ptr.." Pointer:"..pointer)
-    local status, model_info = pcall(memory.read_long, pointer + 0x20)
-    if not status then
-        util.toast("Warning: Access Violation for Handle: "..handle_or_ptr.." Pointer:"..pointer, TOAST_ALL)
-        return
+    local status, model_info
+    if config.wrap_read_model_with_pcall then
+        status, model_info = pcall(memory.read_long, pointer + 0x20)
+        if not status then
+            util.toast("Warning: Access Violation for Handle: "..handle_or_ptr.." Pointer:"..pointer, TOAST_ALL)
+            return
+        end
+    else
+        util.log("Reading model hash Handle: "..handle_or_ptr.." Pointer:"..pointer, TOAST_ALL)
+        model_info = memory.read_long(pointer + 0x20)
     end
-    --local model_info = memory.read_long(handle_or_ptr + 0x20)
     if model_info ~= 0 then
         return memory.read_int(model_info + 0x18)
     end
 end
 
-cmm.build_target_from_handle = function(handle)
+cmm.build_target_from_pointer = function(handle)
     if not handle then return end
     local target = {}
-    target.handle = handle
-    target.model_hash = get_model_hash(target.handle)
+    return target
+end
+
+cmm.expand_target_model = function(target)
+    target.model_hash = entities.get_model_hash(target.handle)
     if target.model_hash then
         target.model = util.reverse_joaat(target.model_hash)
     end
@@ -834,12 +894,14 @@ cmm.build_target_from_handle = function(handle)
     target.name = get_target_name(target)
     target.owner = get_target_owner(target)
     target.pos = ENTITY.GET_ENTITY_COORDS(target.handle, true)
+    cmm.expand_target_position(target)
+end
 
-    target.menu_pos = { x=0.5, y=0.5, }
-    cmm.build_relevant_options(target)
-    target.screen_pos = { x=0.5, y=0.5, }
-    cmm.refresh_screen_pos(target)
-
+cmm.build_target_from_handle = function(handle)
+    if not handle then return end
+    local target = {}
+    target.handle = handle
+    cmm.expand_target_model(target)
     return target
 end
 
@@ -848,20 +910,32 @@ cmm.build_target_from_position = function(position)
     target.type = "COORDS"
     target.pos = { x=round(position.x, 1), y=round(position.y, 1), z=round(position.z, 1)}
     target.name = target.pos.x..","..target.pos.y
+    cmm.expand_target_position(target)
+    return target
+end
 
+cmm.expand_target_position = function(target)
     target.menu_pos = { x=0.5, y=0.5, }
     cmm.build_relevant_options(target)
     target.screen_pos = { x=0.5, y=0.5, }
     cmm.refresh_screen_pos(target)
-
-    return target
 end
 
 cmm.build_target_from_raycast_result = function(raycastResult)
-    local target = {}
     local model_hash
     if raycastResult.didHit then
-        model_hash = get_model_hash(raycastResult.hitEntity)
+        util.log("Loading model hash: "..raycastResult.hitEntity)
+        -- Aaron's model hash function works for WORLD OBJECTs that dont normally return an entity type
+        -- but sometimes causes memory ACCESS_VIOLATION errors
+        if config.use_aarons_model_hash then
+            model_hash = get_model_hash(raycastResult.hitEntity)
+        else
+            local entity_type = ENTITY.GET_ENTITY_TYPE(raycastResult.hitEntity)
+            util.log("Loading entity type "..entity_type)
+            if entity_type > 0 then
+                model_hash = entities.get_model_hash(raycastResult.hitEntity)
+            end
+        end
     end
 
     if config.debug_mode then
@@ -874,17 +948,24 @@ cmm.build_target_from_raycast_result = function(raycastResult)
     if raycastResult.didHit and model_hash ~= nil then
         -- Handle Entity Target
         if raycastResult.hitEntity ~= nil and ENTITY.DOES_ENTITY_EXIST(raycastResult.hitEntity) then
-            target = cmm.build_target_from_handle(raycastResult.hitEntity)
+            return cmm.build_target_from_handle(raycastResult.hitEntity)
         end
-    elseif raycastResult.endCoords.x ~= 0 and raycastResult.endCoords.y ~= 0 then
-        target = cmm.build_target_from_position(raycastResult.endCoords)
     end
-    return target
 end
 
 cmm.get_raycast_target = function()
-    local raycastResult = get_raycast_result(config.selection_distance, config.trace_flag_value)
-    return cmm.build_target_from_raycast_result(raycastResult)
+    local raycastResult
+
+    -- Raycast for Entity Objects
+    raycastResult = get_raycast_result(config.selection_distance, config.trace_flag_value)
+    local target = cmm.build_target_from_raycast_result(raycastResult)
+    if target then return target end
+
+    -- Raycast for World Coords
+    raycastResult = get_raycast_result(config.selection_distance, constants.TRACE_FLAG.ALL)
+    if raycastResult.endCoords.x ~= 0 and raycastResult.endCoords.y ~= 0 then
+        return cmm.build_target_from_position(raycastResult.endCoords)
+    end
 end
 
 cmm.refresh_screen_pos = function(target)
@@ -1000,9 +1081,12 @@ cmm.build_option_wedge_points = function(target)
     end
 end
 
-menu.my_root():toggle("Context Menu enabled", {}, "Right-click on in-game objects to open context menu.", function(value)
-    config.context_menu_enabled = value
-end, config.context_menu_enabled)
+menu.my_root():toggle_loop("Context Menu enabled", {}, "Right-click on in-game objects to open context menu.", function()
+    config.context_menu_enabled = true
+    cmm.context_menu_draw_tick()
+end, function()
+    config.context_menu_enabled = false
+end)
 
 ---
 --- Menu Options
@@ -1148,4 +1232,4 @@ script_meta_menu:hyperlink("Discord", "https://discord.gg/RF4N7cKz", "Open Disco
 --- Tick Handlers
 ---
 
-util.create_tick_handler(cmm.context_menu_draw_tick)
+--util.create_tick_handler(cmm.context_menu_draw_tick)
