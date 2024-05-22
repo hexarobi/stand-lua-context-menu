@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.22"
+local SCRIPT_VERSION = "0.22.1"
 
 ---
 --- Auto Updater
@@ -256,7 +256,7 @@ cmm.find_nearest_target = function()
 
     check_pointers_for_closest_target(entities.get_all_vehicles_as_pointers(), result, config.target_vehicle_distance, config.target_snap_distance.vehicle)
     check_pointers_for_closest_target(entities.get_all_peds_as_pointers(), result, config.target_ped_distance, config.target_snap_distance.ped)
-    check_pointers_for_closest_target(entities.get_all_objects_as_pointers(), result, config.target_object_distance, config.target_snap_distance.object)
+    --check_pointers_for_closest_target(entities.get_all_objects_as_pointers(), result, config.target_object_distance, config.target_snap_distance.object)
 
     if result.closest_target.pointer then
         result.closest_target.handle = entities.pointer_to_handle(result.closest_target.pointer)
