@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.22.1"
+local SCRIPT_VERSION = "0.23"
 
 ---
 --- Auto Updater
@@ -67,7 +67,7 @@ local config = {
     target_ped_distance=30,
     target_object_distance=10,
     target_snap_distance={
-        player=0.09,
+        player=0.04,
         vehicle=0.04,
         ped=0.02,
         object=0.01,
@@ -85,7 +85,7 @@ local config = {
     },
     target_ball_size=0.4,
     selection_distance=600.0,
-    menu_radius=0.1,
+    menu_radius=0.10,
     option_label_distance=0.6,
     option_wedge_deadzone=0.2,
     option_wedge_padding=0.0,
@@ -238,18 +238,21 @@ local function check_pointers_for_closest_target(pointers, result, max_distance,
     end
 end
 
+local function get_all_players_as_handles()
+    local player_handles = {}
+    for _, pid in players.list(false) do
+        table.insert(player_handles, PLAYER.GET_PLAYER_PED_SCRIPT_INDEX(pid))
+    end
+    return player_handles
+end
+
 cmm.find_nearest_target = function()
     local result = {
         min_distance = 9999,
         closest_target = {}
     }
 
-    local player_handles = {}
-    for _, pid in players.list(false) do
-        table.insert(player_handles, PLAYER.GET_PLAYER_PED_SCRIPT_INDEX(pid))
-    end
-
-    check_handles_for_nearest_target(player_handles, result, config.target_player_distance, config.target_snap_distance.player)
+    check_handles_for_nearest_target(get_all_players_as_handles(), result, config.target_player_distance, config.target_snap_distance.player)
     --check_handles_for_nearest_target(entities.get_all_vehicles_as_handles(), result, config.target_vehicle_distance, config.target_snap_distance.vehicle)
     --check_handles_for_nearest_target(entities.get_all_peds_as_handles(), result, config.target_ped_distance, config.target_snap_distance.ped)
     --check_handles_for_nearest_target(entities.get_all_objects_as_handles(), result, config.target_object_distance, config.target_snap_distance.object)
@@ -314,6 +317,11 @@ cmm.refresh_menu_options_from_files = function(directory, path)
 end
 
 cmm.refresh_menu_options_from_files(CONTEXT_MENUS_DIR)
+table.sort(cmm.menu_options, function(a,b) return a.name < b.name end)
+
+--for _, this_option in cmm.menu_options do
+--    debug_log("Sorted relevant options: "..this_option.name)
+--end
 
 local ENTITY_TYPES = {"PED", "VEHICLE", "OBJECT"}
 
@@ -799,13 +807,16 @@ cmm.draw_options_menu = function(target)
 end
 
 local function is_menu_option_relevant(menu_option, target)
-    if menu_option.enabled == false then
-        return false
+    -- Disabled options never apply to any target
+    if menu_option.enabled == false then return false end
+    -- If no applicable_to set then apply to all targets
+    if menu_option.applicable_to == nil then return true end
+    -- If type is specifically listed as applicable then allow it
+    if table.contains(menu_option.applicable_to, target.type) then
+        return true
     end
-    if menu_option.applicable_to ~= nil and not table.contains(menu_option.applicable_to, target.type) then
-        return false
-    end
-    return true
+    -- Disallow anything else
+    return false
 end
 
 cmm.deep_table_copy = function(obj)
@@ -823,11 +834,13 @@ cmm.build_relevant_options = function(target)
     target.relevant_options = {}
     for _, option in cmm.menu_options do
         if is_menu_option_relevant(option, target) then
+            if option.on_open and type(option.on_open) == "function" then
+                option.on_open(target, option)
+            end
             table.insert(target.relevant_options, cmm.deep_table_copy(option))
         end
     end
     --if #relevant_options == 1 then table.insert(relevant_options, cmm.empty_menu_option()) end
-    table.sort(target.relevant_options, function(a,b) return a.name > b.name end)
     table.sort(target.relevant_options, function(a,b) return a.priority > b.priority end)
     cmm.build_option_wedge_points(target)
 end
@@ -1101,7 +1114,7 @@ cmm.build_option_wedge_points = function(target)
     end
 end
 
-menu.my_root():toggle_loop("Context Menu enabled", {}, "Right-click on in-game objects to open context menu.", function()
+menu.my_root():toggle_loop("Context Menu Enabled", {}, "Right-click on in-game objects to open context menu.", function()
     config.context_menu_enabled = true
     cmm.context_menu_draw_tick()
 end, function()
