@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.23"
+local SCRIPT_VERSION = "0.23.1"
 
 ---
 --- Auto Updater
@@ -25,6 +25,7 @@ local auto_update_config = {
         "lib/ContextMenus/enter.lua",
         "lib/ContextMenus/flip.lua",
         "lib/ContextMenus/paste.lua",
+        "lib/ContextMenus/ped_scenario.lua",
         "lib/ContextMenus/player_menu.lua",
         "lib/ContextMenus/repair.lua",
         "lib/ContextMenus/save.lua",
