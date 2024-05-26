@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.25"
+local SCRIPT_VERSION = "0.26"
 
 ---
 --- Auto Updater
@@ -24,6 +24,7 @@ local auto_update_config = {
         "lib/ContextMenus/destroy.lua",
         "lib/ContextMenus/enter.lua",
         "lib/ContextMenus/flip.lua",
+        "lib/ContextMenus/freeze.lua",
         "lib/ContextMenus/paste.lua",
         "lib/ContextMenus/ped_scenario.lua",
         "lib/ContextMenus/player_menu.lua",
@@ -86,9 +87,9 @@ local config = {
     },
     target_ball_size=0.4,
     selection_distance=600.0,
-    menu_radius=0.10,
-    option_label_distance=0.6,
-    option_wedge_deadzone=0.2,
+    menu_radius=0.15,
+    option_label_distance=0.65,
+    option_wedge_deadzone=0.10,
     option_wedge_padding=0.0,
     menu_release_delay=3,
     show_target_name=true,
@@ -1186,14 +1187,14 @@ end
 
 menus.menu_options:divider("Menu Options")
 for _, menu_option in cmm.menu_options do
-    menu_option.menu = menus.menu_options:list(menu_option.name, {}, "Configuration options for this specific menu option")
+    menu_option.menu = menus.menu_options:list(menu_option.name, {"cmmconfig"..menu_option.name}, "Configuration options for this specific menu option")
     menu_option.menu:toggle("Enabled", {}, "Enabled options will show up in menu", function(value)
         menu_option.enabled = value
     end, menu_option.enabled)
-    menu_option.menu:text_input("Hotkey", {"cmmhotkey"..menu_option.id}, "Press this key while the menu is open to select this option", function(value)
+    menu_option.menu:text_input("Hotkey", {"cmmhotkey"..menu_option.name}, "Press this key while the menu is open to select this option", function(value)
         menu_option.hotkey = value
     end, menu_option.hotkey or "")
-    menu_option.menu:slider("Priority", {"cmmpriority"..menu_option.id}, "Higher priority options appear higher in the menu order", -1000, 1000, menu_option.priority, 1, function(value)
+    menu_option.menu:slider("Priority", {"cmmpriority"..menu_option.name}, "Higher priority options appear higher in the menu order", -1000, 1000, menu_option.priority, 1, function(value)
         menu_option.priority = value
     end)
     -- build_menu_option_description(menu_option)
