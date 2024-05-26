@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.24"
+local SCRIPT_VERSION = "0.25"
 
 ---
 --- Auto Updater
@@ -49,6 +49,9 @@ util.require_natives("3095a")
 util.ensure_package_is_installed('lua/inspect')
 local inspect = require("inspect")
 local constants = require("context_menu/constants")
+
+-- Constructor lib is required for some commands, so install it from repo if its not already
+util.ensure_package_is_installed('lua/Constructor')
 
 ---
 --- Config
@@ -774,6 +777,10 @@ cmm.execute_selected_action = function(target)
     state.is_menu_open = false
     if target.selected_option.execute ~= nil and type(target.selected_option.execute) == "function" then
         util.log("Triggering option "..target.selected_option.name)
+        if cmm.is_target_a_player_in_vehicle(target) then
+            target.handle = PED.GET_VEHICLE_PED_IS_IN(target.handle, false)
+            cmm.update_target_data(target)
+        end
         target.selected_option.execute(target)
     end
 end
@@ -842,8 +849,16 @@ local function is_menu_option_relevant(menu_option, target)
     if table.contains(menu_option.applicable_to, target.type) then
         return true
     end
+    -- Also include vehicle options for players in vehicles
+    if cmm.is_target_a_player_in_vehicle(target) and table.contains(menu_option.applicable_to, "VEHICLE") then
+        return true
+    end
     -- Disallow anything else
     return false
+end
+
+cmm.is_target_a_player_in_vehicle = function(target)
+    return target.type == "PLAYER" and PED.IS_PED_IN_ANY_VEHICLE(target.handle)
 end
 
 cmm.deep_table_copy = function(obj)
@@ -944,14 +959,18 @@ cmm.build_target_from_pointer = function(handle)
     return target
 end
 
+cmm.update_target_data = function(target)
+    target.type = get_target_type(target)
+    target.name = get_target_name(target)
+    target.owner = get_target_owner(target)
+end
+
 cmm.expand_target_model = function(target)
     target.model_hash = entities.get_model_hash(target.handle)
     if target.model_hash then
         target.model = util.reverse_joaat(target.model_hash)
     end
-    target.type = get_target_type(target)
-    target.name = get_target_name(target)
-    target.owner = get_target_owner(target)
+    cmm.update_target_data(target)
     target.pos = ENTITY.GET_ENTITY_COORDS(target.handle, true)
     cmm.expand_target_position(target)
 end
