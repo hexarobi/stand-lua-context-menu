@@ -27,6 +27,10 @@ return {
     hotkey="T",
     --applicable_to={"COORDS"},
     execute=function(target)
+        if target.type == "PLAYER" then
+            menu.trigger_commands("tp"..target.name)
+            return
+        end
         local teleport_position = {x=target.pos.x, y=target.pos.y, z=target.pos.z}
         if config.teleport_to_ground_z then
             local ground_z = find_ground_z(target.pos, 100)
@@ -39,11 +43,8 @@ return {
         end
         util.log("Teleporting to "..teleport_position.x..", "..teleport_position.y..", "..teleport_position.z)
         local handle = players.user_ped()
-        if config.include_vehicle then
-            local vehicle_handle = PED.GET_VEHICLE_PED_IS_IN(players.user_ped(), true)
-            if vehicle_handle > 0 then
-                handle = vehicle_handle
-            end
+        if config.include_vehicle and PED.IS_PED_IN_ANY_VEHICLE(players.user_ped()) then
+            handle = PED.GET_VEHICLE_PED_IS_IN(players.user_ped(), false)
         end
         ENTITY.SET_ENTITY_COORDS(handle, teleport_position.x, teleport_position.y, teleport_position.z)
     end,
