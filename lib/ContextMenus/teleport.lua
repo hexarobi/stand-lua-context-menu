@@ -38,11 +38,12 @@ return {
             end
         end
         util.log("Teleporting to "..teleport_position.x..", "..teleport_position.y..", "..teleport_position.z)
-        local handle
+        local handle = players.user_ped()
         if config.include_vehicle then
-            handle = PED.GET_VEHICLE_PED_IS_IN(players.user_ped())
-        else
-            handle = players.user_ped()
+            local vehicle_handle = PED.GET_VEHICLE_PED_IS_IN(players.user_ped(), true)
+            if vehicle_handle > 0 then
+                handle = vehicle_handle
+            end
         end
         ENTITY.SET_ENTITY_COORDS(handle, teleport_position.x, teleport_position.y, teleport_position.z)
     end,
