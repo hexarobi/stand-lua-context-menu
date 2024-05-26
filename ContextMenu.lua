@@ -1,8 +1,8 @@
--- Context Menu Manager
+-- Context Menu
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.23.1"
+local SCRIPT_VERSION = "0.24"
 
 ---
 --- Auto Updater
@@ -40,22 +40,19 @@ if auto_updater == true then
     auto_updater.run_auto_update(auto_update_config)
 end
 
-
---- Context Menu Manager
-local cmm = {
-    menu_options = {},
-}
-local menus = {}
-local state = {}
-
-local pointx = memory.alloc()
-local pointy = memory.alloc()
+---
+--- Dependencies
+---
 
 util.require_natives("3095a")
 
 util.ensure_package_is_installed('lua/inspect')
 local inspect = require("inspect")
 local constants = require("context_menu/constants")
+
+---
+--- Config
+---
 
 local config = {
     debug_mode = false,
@@ -110,17 +107,28 @@ local config = {
     trace_flag_value=0,
 }
 
+---
+--- Vars
+---
+
+local cmm = {
+    menu_options = {},
+}
+local menus = {}
+local state = {}
+
+local pointx = memory.alloc()
+local pointy = memory.alloc()
+
 local CONTEXT_MENUS_DIR = filesystem.scripts_dir()..config.menu_options_scripts_dir
 filesystem.mkdirs(CONTEXT_MENUS_DIR)
 
+---
+--- Utilities
+---
+
 local function debug_log(text)
     util.log("[ContextMenuManager] "..text)
-end
-
-cmm.is_menu_available = function()
-    if not config.context_menu_enabled then return false end
-    if config.only_enable_when_disarmed and WEAPON.IS_PED_ARMED(players.user_ped(), 7) then return false end
-    return true
 end
 
 local function round(num, numDecimalPlaces)
@@ -134,19 +142,16 @@ end
 
 cmm.context_menu_draw_tick = function()
     if not cmm.is_menu_available() then return true end
-    local target = state.current_target
-
-    PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
-    PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
-    PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
+    cmm.disable_controls()
 
     if state.is_menu_open then
-        cmm.refresh_screen_pos(target)
+        cmm.refresh_screen_pos(state.current_target)
     else
         directx.draw_circle(0.5, 0.5, 0.001, config.color.crosshair)
         state.current_target = cmm.find_nearest_target()
     end
 
+    local target = state.current_target
     if target ~= nil and target.pos ~= nil then
         cmm.draw_selection(target)
         if PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, 25) then
@@ -163,6 +168,22 @@ cmm.context_menu_draw_tick = function()
 
     return true
 end
+
+cmm.disable_controls = function()
+    PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
+    PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
+    PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
+end
+
+cmm.is_menu_available = function()
+    if not config.context_menu_enabled then return false end
+    if config.only_enable_when_disarmed and WEAPON.IS_PED_ARMED(players.user_ped(), 7) then return false end
+    return true
+end
+
+---
+--- Targetting
+---
 
 cmm.get_distance_from_player = function(target)
     local player_pos = ENTITY.GET_ENTITY_COORDS(players.user_ped(), 1)
@@ -283,10 +304,15 @@ cmm.add_context_menu_option = function(menu_option)
     table.insert(cmm.menu_options, menu_option)
 end
 
+local unique_id_counter = 0
 cmm.default_menu_option = function(menu_option)
     if menu_option.name == nil then menu_option.name = "Unknown Name" end
     if menu_option.enabled == nil then menu_option.enabled = true end
     if menu_option.priority == nil then menu_option.priority = 0 end
+    if menu_option.id == nil then
+        unique_id_counter = unique_id_counter + 1
+        menu_option.id = unique_id_counter
+    end
 end
 
 cmm.empty_menu_option = function()
@@ -1145,9 +1171,12 @@ for _, menu_option in cmm.menu_options do
     menu_option.menu:toggle("Enabled", {}, "Enabled options will show up in menu", function(value)
         menu_option.enabled = value
     end, menu_option.enabled)
-    menu_option.menu:text_input("Hotkey", {"cmmhotkey"}, "Press this key while the menu is open to select this option", function(value)
+    menu_option.menu:text_input("Hotkey", {"cmmhotkey"..menu_option.id}, "Press this key while the menu is open to select this option", function(value)
         menu_option.hotkey = value
     end, menu_option.hotkey or "")
+    menu_option.menu:slider("Priority", {"cmmpriority"..menu_option.id}, "Higher priority options appear higher in the menu order", -1000, 1000, menu_option.priority, 1, function(value)
+        menu_option.priority = value
+    end)
     -- build_menu_option_description(menu_option)
     if menu_option.config_menu ~= nil then
         menu_option.menu:divider("Config")
