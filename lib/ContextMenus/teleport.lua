@@ -1,3 +1,25 @@
+
+local config = {
+    include_vehicle=true,
+    teleport_to_ground_z=false,
+}
+
+local function find_ground_z(position, timeout)
+    if timeout == nil then timeout = 100 end
+    local success = false
+    local max_ground_z = 1000
+    local ground_z = max_ground_z
+    local counter = 0
+    while success == false and counter < timeout do
+        success, ground_z = util.get_ground_z(position.x, position.y, max_ground_z)
+        counter = counter + 1
+        util.yield()
+    end
+    if ground_z < max_ground_z then
+        return ground_z
+    end
+end
+
 return {
     name="Teleport",
     help="Teleport to location",
@@ -5,11 +27,31 @@ return {
     hotkey="T",
     --applicable_to={"COORDS"},
     execute=function(target)
-        if (target.pos.x == 0 and target.pos.y == 0) or target.pos.z < 0 then
-            util.toast("Invalid target position")
-        else
-            util.log("Teleporting to "..target.pos.x..", "..target.pos.y..", "..target.pos.z)
-            ENTITY.SET_ENTITY_COORDS(players.user_ped(), target.pos.x, target.pos.y, target.pos.z)
+        local teleport_position = {x=target.pos.x, y=target.pos.y, z=target.pos.z}
+        if config.teleport_to_ground_z then
+            local ground_z = find_ground_z(target.pos, 100)
+            if ground_z then
+                target.pos.z = ground_z
+            else
+                util.toast("Invalid teleport position")
+                return
+            end
         end
+        util.log("Teleporting to "..teleport_position.x..", "..teleport_position.y..", "..teleport_position.z)
+        local handle
+        if config.include_vehicle then
+            handle = PED.GET_VEHICLE_PED_IS_IN(players.user_ped())
+        else
+            handle = players.user_ped()
+        end
+        ENTITY.SET_ENTITY_COORDS(handle, teleport_position.x, teleport_position.y, teleport_position.z)
+    end,
+    config_menu=function(menu_root)
+        menu_root:toggle("Include Vehicle", {}, "If inside a vehicle, then teleport the vehicle as well", function(value)
+            config.include_vehicle = value
+        end, config.include_vehicle)
+        menu_root:toggle("Teleport to Roof", {}, "Teleport to highest safe ground position", function(value)
+            config.teleport_to_ground_z = value
+        end, config.teleport_to_ground_z)
     end
 }
