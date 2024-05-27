@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.26"
+local SCRIPT_VERSION = "0.27"
 
 ---
 --- Auto Updater
@@ -61,7 +61,8 @@ util.ensure_package_is_installed('lua/Constructor')
 local config = {
     debug_mode = false,
     context_menu_enabled=true,
-    only_enable_when_disarmed=true,
+    disable_in_vehicles=true,
+    disable_when_armed=true,
     use_aarons_model_hash=true,
     wrap_read_model_with_pcall=false,
     target_player_distance=2000,
@@ -181,7 +182,8 @@ end
 
 cmm.is_menu_available = function()
     if not config.context_menu_enabled then return false end
-    if config.only_enable_when_disarmed and WEAPON.IS_PED_ARMED(players.user_ped(), 7) then return false end
+    if config.disable_in_vehicles then if PED.IS_PED_IN_ANY_VEHICLE(players.user_ped()) then return false end end
+    if config.disable_when_armed and WEAPON.IS_PED_ARMED(players.user_ped(), 7) then return false end
     return true
 end
 
@@ -1209,9 +1211,12 @@ end
 ---
 
 menus.settings = menu.my_root():list("Settings", {}, "Configuration options for this script.")
-menus.settings:toggle("Only Enable when Unarmed", {}, "Only display the context menu when you are not holding a weapon", function(value)
-    config.only_enable_when_disarmed = value
-end, config.only_enable_when_disarmed)
+menus.settings:toggle("Diable When Armed", {}, "Only display the context menu when you are not holding a weapon", function(value)
+    config.disable_when_armed = value
+end, config.disable_when_armed)
+menus.settings:toggle("Disable In Vehicles", {}, "Only display the menu when on foot, outside of a vehicle", function(value)
+    config.disable_in_vehicles = value
+end, config.disable_in_vehicles)
 
 menus.settings:divider("Targeting")
 
