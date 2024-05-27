@@ -2,6 +2,39 @@
 
 local constants = {
 
+    preset_name_list = {
+        "PAUSE_SINGLE_LEFT",
+        "PAUSE_SINGLE_MIDDLE",
+        "PAUSE_SINGLE_RIGHT",
+        "FACE_CREATION_PRESET",
+        "MPLOBBY_ALL5SLOTS",
+        "FACE_CREATION_CONFIRM",
+        "CELEBRATION_WINNER",
+        "CHARACTER_CREATOR_HERITAGE"
+    },
+
+    preset_name_index_map = {
+        PAUSE_SINGLE_LEFT = 1,
+        PAUSE_SINGLE_MIDDLE = 2,
+        PAUSE_SINGLE_RIGHT = 3,
+        FACE_CREATION_PRESET = 4,
+        MPLOBBY_ALL5SLOTS = 5,
+        FACE_CREATION_CONFIRM = 6,
+        CELEBRATION_WINNER = 7,
+        CHARACTER_CREATOR_HERITAGE = 8
+    },
+
+    preset_slot_values = {
+        PAUSE_SINGLE_LEFT = 0,
+        PAUSE_SINGLE_MIDDLE = 0,
+        PAUSE_SINGLE_RIGHT = 0,
+        FACE_CREATION_PRESET = 4,
+        MPLOBBY_ALL5SLOTS = 2,
+        FACE_CREATION_CONFIRM = 0,
+        CELEBRATION_WINNER = 2,
+        CHARACTER_CREATOR_HERITAGE = 1
+    },
+
     hotkey_map = {
         BACKSPACE=0x08,
         TAB=0x09,
