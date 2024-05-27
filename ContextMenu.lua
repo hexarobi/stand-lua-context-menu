@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.27"
+local SCRIPT_VERSION = "0.28"
 
 ---
 --- Auto Updater
@@ -65,12 +65,22 @@ local config = {
     disable_when_armed=true,
     use_aarons_model_hash=true,
     wrap_read_model_with_pcall=false,
-    target_player_distance=2000,
+    ped_preview = {
+        enabled=true,
+        preset_name="PAUSE_SINGLE_LEFT",
+        preset_slot=0,
+        pos={
+            x=0.0,
+            y=-1.0,
+            z=0.0,
+        },
+    },
+    target_player_distance=5000,
     target_vehicle_distance=100,
     target_ped_distance=30,
     target_object_distance=10,
     target_snap_distance={
-        player=0.04,
+        player=0.08,
         vehicle=0.04,
         ped=0.02,
         object=0.01,
@@ -185,6 +195,20 @@ cmm.is_menu_available = function()
     if config.disable_in_vehicles then if PED.IS_PED_IN_ANY_VEHICLE(players.user_ped()) then return false end end
     if config.disable_when_armed and WEAPON.IS_PED_ARMED(players.user_ped(), 7) then return false end
     return true
+end
+
+cmm.draw_ped_preview = function(target)
+    if not config.ped_preview.enabled or target.type ~= "PLAYER" then return end
+    if GRAPHICS.UI3DSCENE_IS_AVAILABLE() then
+        if GRAPHICS.UI3DSCENE_PUSH_PRESET(config.ped_preview.preset_name) then
+            GRAPHICS.UI3DSCENE_ASSIGN_PED_TO_SLOT(
+                config.ped_preview.preset_name, target.handle, config.ped_preview.preset_slot,
+                config.ped_preview.pos.x, config.ped_preview.pos.y, config.ped_preview.pos.z
+            )
+            GRAPHICS.UI3DSCENE_MAKE_PUSHED_PRESET_PERSISTENT()
+            GRAPHICS.UI3DSCENE_CLEAR_PATCHED_DATA()
+        end
+    end
 end
 
 ---
@@ -652,7 +676,7 @@ local function build_wedge_points(point_angles, target)
     local top_points = {}
     local bottom_points = {}
     for _, point_angle in point_angles do
-        local top_point = get_circle_coords(target.menu_pos, config.menu_radius, point_angle)
+        local top_point = get_circle_coords(target.menu_pos, config.menu_radius * 1.05, point_angle)
         table.insert(top_points, top_point)
         local bottom_point = get_circle_coords(target.menu_pos, config.menu_radius * config.option_wedge_deadzone, point_angle)
         table.insert(bottom_points, bottom_point)
@@ -811,17 +835,7 @@ cmm.draw_options_menu = function(target)
     --    directx.draw_line(0.5, 0.5, target.screen_pos.x, target.screen_pos.y, config.color.line_to_target)
     --end
 
-    if config.show_target_name and target.name ~= nil then
-        local label = target.type .. ": " .. target.name
-        if config.show_target_owner and target.owner and target.owner ~= target.name then
-            label = label .. " (" .. target.owner .. ")"
-        end
-        cmm.get_distance_from_player(target)
-        if target.distance_from_player then
-            label = label .. " [" .. round(target.distance_from_player, 1) .. "m]"
-        end
-        cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), label, 5, 0.5, config.color.option_text, true)
-    end
+    cmm.draw_target_label(target)
 
     for option_index, option in target.relevant_options do
         if option.name ~= nil then
@@ -839,6 +853,29 @@ cmm.draw_options_menu = function(target)
                     )
                 end
             end
+        end
+    end
+end
+
+cmm.draw_target_label = function(target)
+    if config.show_target_name and target.name ~= nil then
+        local label = target.type .. ": " .. target.name
+        if config.show_target_owner and target.owner and target.owner ~= target.name then
+            label = label .. " (" .. target.owner .. ")"
+        end
+        cmm.get_distance_from_player(target)
+        if target.distance_from_player then
+            label = label .. " [" .. round(target.distance_from_player, 1) .. "m]"
+        end
+
+        if cmm.is_target_a_player_in_vehicle(target) then
+            local row_offset = 0.02
+            cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9) - row_offset, label, 5, 0.5, config.color.option_text, true)
+            local players_vehicle = PED.GET_VEHICLE_PED_IS_IN(target.handle, false)
+            label = "VEHICLE: " .. cmm.get_vehicle_name_by_handle(players_vehicle)
+            cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), label, 5, 0.5, config.color.option_text, true)
+        else
+            cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y - (config.menu_radius * 1.9), label, 5, 0.5, config.color.option_text, true)
         end
     end
 end
@@ -907,6 +944,14 @@ local function get_player_id_from_handle(handle)
     end
 end
 
+cmm.get_vehicle_name_by_model= function(model_hash)
+    return util.get_label_text(VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(model_hash))
+end
+
+cmm.get_vehicle_name_by_handle = function(handle)
+    return cmm.get_vehicle_name_by_model(entities.get_model_hash(handle))
+end
+
 local function get_target_name(target)
     if target.type == "PLAYER" then
         local pid = get_player_id_from_handle(target.handle)
@@ -914,7 +959,7 @@ local function get_target_name(target)
             return PLAYER.GET_PLAYER_NAME(pid)
         end
     elseif target.type == "VEHICLE" then
-        return util.get_label_text(VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(target.model_hash))
+        return cmm.get_vehicle_name_by_model(target.model_hash)
     end
     return target.model
 end
@@ -1099,6 +1144,7 @@ cmm.update_menu = function(target)
     cmm.check_option_hotkeys(target)
     cmm.find_selected_option(target)
     cmm.draw_options_menu(target)
+    cmm.draw_ped_preview(target)
 end
 
 cmm.open_options_menu = function(target)
@@ -1285,6 +1331,28 @@ menus.settings:slider("Option Padding", {"cmmoptionpadding"}, "The spacing betwe
     config.option_wedge_padding = value / 100
 end)
 
+menus.settings_player_previews = menus.settings:list("Player Previews", {}, "Options about displaying previews when targeting other players")
+menus.settings_player_previews:toggle("Enable Player Previews", {}, "Display previews of the players model when targeting", function(value)
+    config.ped_preview.enabled = value
+end, config.ped_preview.enabled)
+menus.settings_player_previews:list_select("Preset Name", {"cmmplayerpreviewpresetname"}, "The selected preset name used for the rendering.", constants.preset_name_list, constants.preset_name_index_map[config.ped_preview.preset_name], function(value, menu_name)
+    config.ped_preview.preset_name = menu_name
+    menu.set_value(menus.settings_player_previews_preset_slot, config.ped_preview.preset_slot)
+    menu.set_max_value(menus.settings_player_previews_preset_slot, constants.preset_slot_values[config.ped_preview.preset_name])
+end)
+menus.settings_player_previews_preset_slot = menus.settings_player_previews:slider("Preset Slot", {"cmmplayerpreviewpresetslot"}, "The selected preset slot used for the rendering.", 0, constants.preset_slot_values[config.ped_preview.preset_name], 0, 1, function(value)
+    config.ped_preview.preset_slot = value
+end)
+menus.settings_player_previews:slider("Player Preview Pos X", {"cmmplayerpreviewposx"}, "", -20, 20, config.ped_preview.pos.x * 10, 1, function(value)
+    config.ped_preview.pos.x = value / 10
+end)
+menus.settings_player_previews:slider("Player Preview Pos Y", {"cmmplayerpreviewposy"}, "", -100, 10, config.ped_preview.pos.y * 10, 1, function(value)
+    config.ped_preview.pos.y = value / 10
+end)
+menus.settings_player_previews:slider("Player Preview Pos Z", {"cmmplayerpreviewposz"}, "", -20, 20, config.ped_preview.pos.z * 10, 1, function(value)
+    config.ped_preview.pos.z = value / 10
+end)
+
 menus.settings_colors = menus.settings:list("Colors")
 menu.inline_rainbow(menus.settings_colors:colour("Target Ball Color", {"cmmcolortargetball"}, "The ball cursor when no specific entity is selected", config.color.target_ball, true, function(color)
     config.color.target_ball = color
@@ -1324,6 +1392,13 @@ if auto_update_config and auto_updater then
 end
 script_meta_menu:hyperlink("Github Source", "https://github.com/hexarobi/stand-lua-context-menu", "View source files on Github")
 script_meta_menu:hyperlink("Discord", "https://discord.gg/RF4N7cKz", "Open Discord Server")
+script_meta_menu:divider("Credits")
+script_meta_menu:readonly("Main Developer", "Hexarobi")
+script_meta_menu:readonly("Player Previews", "Baiawai")
+script_meta_menu:readonly("World Object Targeting", "Davus")
+script_meta_menu:readonly("Model Hash Resolution", "aarroonn")
+script_meta_menu:readonly("Foundational Work", "murten")
+script_meta_menu:readonly("Foundational Work", "Wiri")
 
 ---
 --- Tick Handlers
