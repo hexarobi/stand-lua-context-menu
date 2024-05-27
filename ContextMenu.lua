@@ -1211,7 +1211,7 @@ end
 ---
 
 menus.settings = menu.my_root():list("Settings", {}, "Configuration options for this script.")
-menus.settings:toggle("Diable When Armed", {}, "Only display the context menu when you are not holding a weapon", function(value)
+menus.settings:toggle("Disable When Armed", {}, "Only display the context menu when you are not holding a weapon", function(value)
     config.disable_when_armed = value
 end, config.disable_when_armed)
 menus.settings:toggle("Disable In Vehicles", {}, "Only display the menu when on foot, outside of a vehicle", function(value)
