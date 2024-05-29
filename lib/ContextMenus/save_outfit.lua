@@ -80,7 +80,7 @@ return {
         local target_player_gender = get_player_gender(target.player_id)
         local target_player_name = PLAYER.GET_PLAYER_NAME(target.player_id)
 
-        util.log("Copying player gender from "..target_player_name.." : "..target_player_gender)
+        --util.log("Copying player gender from "..target_player_name.." : "..target_player_gender)
 
         set_player_gender(target_player_gender)
         util.yield(delay_time)
