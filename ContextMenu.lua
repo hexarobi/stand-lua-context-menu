@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.29"
+local SCRIPT_VERSION = "0.30"
 
 ---
 --- Auto Updater
@@ -63,6 +63,7 @@ local config = {
     context_menu_enabled=true,
     disable_in_vehicles=true,
     disable_when_armed=true,
+    open_menu_key=25,
     use_aarons_model_hash=true,
     wrap_read_model_with_pcall=false,
     ped_preview = {
@@ -185,17 +186,18 @@ cmm.context_menu_draw_tick = function()
 end
 
 cmm.is_menu_open_control_pressed = function()
-    return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, 25) and not HUD.IS_PAUSE_MENU_ACTIVE()
+    return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.open_menu_key) and not HUD.IS_PAUSE_MENU_ACTIVE()
 end
 
 cmm.is_menu_close_control_pressed = function()
-    return not PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) or HUD.IS_PAUSE_MENU_ACTIVE()
+    return not PAD.IS_DISABLED_CONTROL_PRESSED(2, config.open_menu_key) or HUD.IS_PAUSE_MENU_ACTIVE()
 end
 
 cmm.disable_controls = function()
     PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
     PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
     PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
+    PAD.DISABLE_CONTROL_ACTION(2, config.open_menu_key, false) --phone
 end
 
 cmm.is_menu_available = function()
@@ -1271,6 +1273,9 @@ end, config.disable_when_armed)
 menus.settings:toggle("Disable In Vehicles", {}, "Only display the menu when on foot, outside of a vehicle", function(value)
     config.disable_in_vehicles = value
 end, config.disable_in_vehicles)
+menus.settings:slider("Open Menu Key", {"cmmopenmenukey"}, "Which input opens the menu. Reference: https://docs.fivem.net/docs/game-references/controls/", 1, 360, config.open_menu_key, 1, function(value)
+    config.open_menu_key = value
+end)
 
 menus.settings:divider("Targeting")
 
