@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.28"
+local SCRIPT_VERSION = "0.29"
 
 ---
 --- Auto Updater
@@ -169,9 +169,9 @@ cmm.context_menu_draw_tick = function()
     local target = state.current_target
     if target ~= nil and target.pos ~= nil then
         cmm.draw_selection(target)
-        if PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, 25) then
+        if cmm.is_menu_open_control_pressed() then
             cmm.open_options_menu(target)
-        elseif not PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) then
+        elseif cmm.is_menu_close_control_pressed() then
             cmm.close_options_menu(target)
         end
         if state.is_menu_open then
@@ -182,6 +182,14 @@ cmm.context_menu_draw_tick = function()
     end
 
     return true
+end
+
+cmm.is_menu_open_control_pressed = function()
+    return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, 25) and not HUD.IS_PAUSE_MENU_ACTIVE()
+end
+
+cmm.is_menu_close_control_pressed = function()
+    return not PAD.IS_DISABLED_CONTROL_PRESSED(2, 25) or HUD.IS_PAUSE_MENU_ACTIVE()
 end
 
 cmm.disable_controls = function()
@@ -242,6 +250,7 @@ local function build_handle_target(handle)
         handle=handle,
         position=ENTITY.GET_ENTITY_COORDS(handle),
     }
+    cmm.update_target_data(target)
     expand_target_screen_pos(target)
     return target
 end
@@ -753,7 +762,8 @@ cmm.check_option_hotkeys = function(target)
     --PAD.DISABLE_CONTROL_ACTION(2, 245, true) --chat
     for option_index, option in target.relevant_options do
         local hotkey = option.hotkey
-        if constants.hotkey_map[hotkey] ~= nil then hotkey = constants.hotkey_map[hotkey] end
+        if hotkey then hotkey = hotkey:upper() end
+        if hotkey and constants.hotkey_map[hotkey] ~= nil then hotkey = constants.hotkey_map[hotkey] end
         if hotkey ~= nil and util.is_key_down(hotkey) then
             target.selected_option = option
             cmm.execute_selected_action(target)
@@ -927,9 +937,9 @@ cmm.build_relevant_options = function(target)
     cmm.build_option_wedge_points(target)
 end
 
-local function get_target_type(new_target)
-    local entity_type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(new_target.handle)] or "WORLD_OBJECT"
-    if entity_type == "PED" and entities.is_player_ped(new_target.handle) then
+local function get_target_type(target)
+    local entity_type = ENTITY_TYPES[ENTITY.GET_ENTITY_TYPE(target.handle)] or "WORLD_OBJECT"
+    if entity_type == "PED" and entities.is_player_ped(target.handle) then
         return "PLAYER"
     end
     return entity_type
@@ -953,11 +963,8 @@ cmm.get_vehicle_name_by_handle = function(handle)
 end
 
 local function get_target_name(target)
-    if target.type == "PLAYER" then
-        local pid = get_player_id_from_handle(target.handle)
-        if pid then
-            return PLAYER.GET_PLAYER_NAME(pid)
-        end
+    if target.type == "PLAYER" and target.player_id then
+        return PLAYER.GET_PLAYER_NAME(target.player_id)
     elseif target.type == "VEHICLE" then
         return cmm.get_vehicle_name_by_model(target.model_hash)
     end
@@ -1009,6 +1016,7 @@ end
 
 cmm.update_target_data = function(target)
     target.type = get_target_type(target)
+    target.player_id = get_player_id_from_handle(target.handle)
     target.name = get_target_name(target)
     target.owner = get_target_owner(target)
 end
