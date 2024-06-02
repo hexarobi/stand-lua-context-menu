@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.30"
+local SCRIPT_VERSION = "0.31"
 
 ---
 --- Auto Updater
@@ -64,6 +64,7 @@ local config = {
     disable_in_vehicles=true,
     disable_when_armed=true,
     open_menu_key=25,
+    hot_keys_enabled=true,
     use_aarons_model_hash=true,
     wrap_read_model_with_pcall=false,
     ped_preview = {
@@ -761,6 +762,7 @@ cmm.handle_inputs = function(target)
 end
 
 cmm.check_option_hotkeys = function(target)
+    if not config.hot_keys_enabled then return end
     --PAD.DISABLE_CONTROL_ACTION(2, 245, true) --chat
     for option_index, option in target.relevant_options do
         local hotkey = option.hotkey
@@ -858,7 +860,7 @@ cmm.draw_options_menu = function(target)
 
             if config.show_option_help and target.selected_option == option then
                 cmm.draw_text_with_shadow(target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9), option.help, 5, 0.5, config.color.help_text, true)
-                if option.hotkey then
+                if option.hotkey and config.hot_keys_enabled then
                     cmm.draw_text_with_shadow(
                         target.menu_pos.x, target.menu_pos.y + (config.menu_radius * 1.9) + 0.02,
                         "Hotkey: "..option.hotkey, 5, 0.5, config.color.help_text, true
@@ -1276,6 +1278,9 @@ end, config.disable_in_vehicles)
 menus.settings:slider("Open Menu Key", {"cmmopenmenukey"}, "Which input opens the menu. Reference: https://docs.fivem.net/docs/game-references/controls/", 1, 360, config.open_menu_key, 1, function(value)
     config.open_menu_key = value
 end)
+menus.settings:toggle("Hot Keys Enabled", {}, "Hotkeys allow for selecting menu options by pressing keyboard keys.", function(value)
+    config.hot_keys_enabled = value
+end, config.hot_keys_enabled)
 
 menus.settings:divider("Targeting")
 
