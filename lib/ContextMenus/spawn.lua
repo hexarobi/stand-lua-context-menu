@@ -31,7 +31,8 @@ local function build_vehicles_items()
             name = util.get_label_text(VEHICLE.GET_DISPLAY_NAME_FROM_VEHICLE_MODEL(util.joaat(vehicle.name))),
             model = vehicle.name,
             class = lang.get_localised(vehicle.class) or "Unknown",
-            execute = spawn_item
+            execute = spawn_item,
+            applicable_to = {"COORDS"},
         }
         if util.get_label_text(vehicle.manufacturer) ~= "NULL" then
             item.manufacturer = util.get_label_text(vehicle.manufacturer)
