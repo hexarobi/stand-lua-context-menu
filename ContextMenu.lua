@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.31"
+local SCRIPT_VERSION = "0.32"
 
 ---
 --- Auto Updater
@@ -63,7 +63,18 @@ local config = {
     context_menu_enabled=true,
     disable_in_vehicles=true,
     disable_when_armed=true,
-    open_menu_key=25,
+    controls ={
+        keyboard={
+            open_menu=177,
+            close_menu=177,
+            select_option=176,
+        },
+        controller={
+            open_menu=52,
+            close_menu=177,
+            select_option=176,
+        },
+    },
     hot_keys_enabled=true,
     use_aarons_model_hash=true,
     wrap_read_model_with_pcall=false,
@@ -101,7 +112,7 @@ local config = {
     target_ball_size=0.4,
     selection_distance=600.0,
     menu_radius=0.15,
-    option_label_distance=0.65,
+    option_label_distance=0.75,
     option_wedge_deadzone=0.10,
     option_wedge_padding=0.0,
     menu_release_delay=3,
@@ -153,6 +164,17 @@ local function round(num, numDecimalPlaces)
     return math.floor(num * mult + 0.5) / mult
 end
 
+local function deep_table_copy(obj)
+    if type(obj) ~= 'table' then
+        return obj
+    end
+    local res = setmetatable({}, getmetatable(obj))
+    for k, v in pairs(obj) do
+        res[deep_table_copy(k)] = deep_table_copy(v)
+    end
+    return res
+end
+
 ---
 --- Main Menu Draw Tick
 ---
@@ -171,34 +193,65 @@ cmm.context_menu_draw_tick = function()
     local target = state.current_target
     if target ~= nil and target.pos ~= nil then
         cmm.draw_selection(target)
-        if cmm.is_menu_open_control_pressed() then
-            cmm.open_options_menu(target)
-        elseif cmm.is_menu_close_control_pressed() then
-            cmm.close_options_menu(target)
-        end
         if state.is_menu_open then
+            cmm.update_menu(target)
+            if cmm.is_menu_select_control_pressed() then
+                cmm.execute_selected_action(target)
+            end
+            if cmm.is_menu_close_control_pressed() then
+                if target.previous_relevant_options then
+                    cmm.build_relevant_options(target, target.previous_relevant_options.relevant_options)
+                    target.previous_relevant_options = target.previous_relevant_options.parent
+                else
+                    cmm.close_options_menu(target)
+                end
+            end
             -- TODO: why doesnt disabling here work?
             --PAD.DISABLE_CONTROL_ACTION(2, 245, true) --chat
-            cmm.update_menu(target)
+        else
+            if cmm.is_menu_open_control_pressed() then
+                cmm.open_options_menu(target)
+            end
         end
     end
 
     return true
 end
 
+cmm.is_menu_select_control_pressed = function()
+    if PAD.IS_USING_KEYBOARD_AND_MOUSE(2) then
+        return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.keyboard.select_option)
+    else
+        return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.controller.select_option)
+    end
+end
+
 cmm.is_menu_open_control_pressed = function()
-    return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.open_menu_key) and not HUD.IS_PAUSE_MENU_ACTIVE()
+    if HUD.IS_PAUSE_MENU_ACTIVE() then return false end
+    if PAD.IS_USING_KEYBOARD_AND_MOUSE(2) then
+        return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.keyboard.open_menu)
+    else
+        return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.controller.open_menu)
+    end
 end
 
 cmm.is_menu_close_control_pressed = function()
-    return not PAD.IS_DISABLED_CONTROL_PRESSED(2, config.open_menu_key) or HUD.IS_PAUSE_MENU_ACTIVE()
+    if HUD.IS_PAUSE_MENU_ACTIVE() then return true end
+    if PAD.IS_USING_KEYBOARD_AND_MOUSE(2) then
+        return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.keyboard.close_menu)
+            or PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.keyboard.open_menu)
+    else
+        return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.controller.close_menu)
+            or PAD.IS_DISABLED_CONTROL_JUST_PRESSED(2, config.controls.controller.open_menu)
+    end
 end
 
 cmm.disable_controls = function()
     PAD.DISABLE_CONTROL_ACTION(2, 25, true) --aim
     PAD.DISABLE_CONTROL_ACTION(2, 24, true) --attack
     PAD.DISABLE_CONTROL_ACTION(2, 257, true) --attack2
-    PAD.DISABLE_CONTROL_ACTION(2, config.open_menu_key, false) --phone
+    PAD.DISABLE_CONTROL_ACTION(2, config.controls.keyboard.open_menu, false)
+    PAD.DISABLE_CONTROL_ACTION(2, config.controls.controller.open_menu, false)
 end
 
 cmm.is_menu_available = function()
@@ -340,10 +393,10 @@ end
 --- Menu Options
 ---
 
-cmm.add_context_menu_option = function(menu_option)
+cmm.add_context_menu_option = function(menu_option, options_list)
     cmm.default_menu_option(menu_option)
     debug_log("Adding menu option "..menu_option.name or "Unknown")
-    table.insert(cmm.menu_options, menu_option)
+    table.insert(options_list, menu_option)
 end
 
 local unique_id_counter = 0
@@ -365,24 +418,54 @@ cmm.empty_menu_option = function()
     }
 end
 
-cmm.refresh_menu_options_from_files = function(directory, path)
+cmm.refresh_menu_options_from_files = function(directory, path, options_list)
     if path == nil then path = "" end
+    if options_list == nil then options_list = cmm.menu_options end
     for _, filepath in ipairs(filesystem.list_files(directory)) do
         if filesystem.is_dir(filepath) then
             local _2, dirname = string.match(filepath, "(.-)([^\\/]-%.?)$")
-            cmm.refresh_menu_options_from_files(filepath, path.."/"..dirname)
+            local filerelpath = path.."/"..dirname
+            local menu_option = cmm.default_container_menu_option(filerelpath, dirname)
+            cmm.refresh_menu_options_from_files(filepath, filerelpath, menu_option.items)
+            debug_log("Adding "..#menu_option.items.." items to "..menu_option.name)
+            cmm.add_context_menu_option(menu_option, options_list)
         else
             local _3, filename, ext = string.match(filepath, "(.-)([^\\/]-%.?)[.]([^%.\\/]*)$")
-            if ext == "lua" or ext == "pluto" then
+            if (ext == "lua" or ext == "pluto") and filename ~= "_folder" then
                 local menu_option = require(config.menu_options_scripts_dir..path.."/"..filename)
                 menu_option.filename = filename.."."..ext
                 menu_option.filepath = filepath
                 --debug_log("Loading menu option "..config.menu_options_scripts_dir..path.."/"..filename..": "..inspect(menu_option))
                 --cc.expand_chat_command_defaults(command, filename, path)
-                cmm.add_context_menu_option(menu_option)
+                cmm.add_context_menu_option(menu_option, options_list)
             end
         end
     end
+end
+
+local function file_exists(name)
+    local f=io.open(name,"r")
+    if f~=nil then io.close(f) return true else return false end
+end
+
+
+cmm.default_container_menu_option = function(filepath, name)
+    local menu_option = {}
+    local folder_info_filepath = config.menu_options_scripts_dir..filepath.."/_folder"
+    local full_filepath = filesystem.scripts_dir()..folder_info_filepath..".lua"
+    --debug_log("defaulting container from "..full_filepath)
+    if file_exists(full_filepath) then
+        local status, extra_menu_option = pcall(require, folder_info_filepath)
+        if not status then
+            util.toast("Failed to load context menu option "..extra_menu_option, TOAST_ALL)
+        else
+            menu_option = extra_menu_option
+        end
+    end
+
+    if menu_option.name == nil then menu_option.name = name end
+    if menu_option.items == nil then menu_option.items = {} end
+    return menu_option
 end
 
 cmm.refresh_menu_options_from_files(CONTEXT_MENUS_DIR)
@@ -501,6 +584,7 @@ cmm.draw_bounding_box_with_dimensions = function(entity, colour, minimum_vec, ma
 end
 
 cmm.draw_text_with_shadow = function(posx, posy, text, alignment, scale, color, force_in_bounds)
+    if text == nil then return end
     if alignment == nil then alignment = 5 end
     if scale == nil then scale = 0.5 end
     if color == nil then color = config.color.option_text end
@@ -732,9 +816,11 @@ local function is_angle_between(angle, left, right)
 end
 
 local function get_controls_angle_magnitude()
+    PAD.DISABLE_CONTROL_ACTION(0, 31, false) --x
+    PAD.DISABLE_CONTROL_ACTION(0, 30, false) --y
     local mouse_movement = {
-        x=PAD.GET_CONTROL_NORMAL(0, 13),
-        y=PAD.GET_CONTROL_NORMAL(0, 12),
+        x=PAD.GET_DISABLED_CONTROL_NORMAL(0, 30),
+        y=PAD.GET_DISABLED_CONTROL_NORMAL(0, 31),
     }
     local magnitude = math.sqrt(mouse_movement.x ^ 2 + mouse_movement.y ^ 2)
     local angle = normalize_angle(math.deg(math.atan(mouse_movement.y, mouse_movement.x)))
@@ -808,7 +894,7 @@ cmm.trigger_selected_action = function(target)
         elseif target.selected_option.ticks_shown > config.menu_release_delay then
             cmm.execute_selected_action(target)
         else
-            util.draw_debug_text("ticks shown = "..target.selected_option.ticks_shown)
+            --util.draw_debug_text("ticks shown = "..target.selected_option.ticks_shown)
             target.selected_option.ticks_shown = target.selected_option.ticks_shown + 1
         end
     end
@@ -816,6 +902,7 @@ end
 
 cmm.execute_selected_action = function(target)
     state.is_menu_open = false
+    if not target.selected_option then return end
     if target.selected_option.execute ~= nil and type(target.selected_option.execute) == "function" then
         util.log("Triggering option "..target.selected_option.name)
         if cmm.is_target_a_player_in_vehicle(target) then
@@ -823,6 +910,13 @@ cmm.execute_selected_action = function(target)
             cmm.update_target_data(target)
         end
         target.selected_option.execute(target)
+    elseif target.selected_option.items ~= nil and type(target.selected_option.items) == "table" then
+        state.is_menu_open = true
+        target.previous_relevant_options = {
+            parent=target.previous_relevant_options,
+            relevant_options=deep_table_copy(target.relevant_options)
+        }
+        cmm.build_relevant_options(target, target.selected_option.items)
     end
 end
 
@@ -853,8 +947,12 @@ cmm.draw_options_menu = function(target)
 
     for option_index, option in target.relevant_options do
         if option.name ~= nil then
+            local option_text = option.name
+            if option.num_relevant_children and option.num_relevant_children > 0 then
+                option_text = option_text.." ("..option.num_relevant_children..")"
+            end
             local option_text_coords = get_circle_coords(target.menu_pos, config.menu_radius*config.option_label_distance, option.option_angle)
-            cmm.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option.name, 5, 0.5, config.color.option_text, true)
+            cmm.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option_text, 5, 0.5, config.color.option_text, true)
 
             draw_polygon(option.wedge_points, get_option_wedge_draw_color(target, option))
 
@@ -895,6 +993,16 @@ cmm.draw_target_label = function(target)
 end
 
 local function is_menu_option_relevant(menu_option, target)
+    -- If menu option is a container, then check for at least one relevant child
+    if menu_option.items ~= nil then
+        menu_option.num_relevant_children = 0
+        for _, child_option in menu_option.items do
+            if is_menu_option_relevant(child_option, target) then
+                menu_option.num_relevant_children = menu_option.num_relevant_children + 1
+            end
+        end
+        return menu_option.num_relevant_children > 0
+    end
     -- Disabled options never apply to any target
     if menu_option.enabled == false then return false end
     -- If no applicable_to set then apply to all targets
@@ -926,9 +1034,10 @@ cmm.deep_table_copy = function(obj)
     return res
 end
 
-cmm.build_relevant_options = function(target)
+cmm.build_relevant_options = function(target, options)
+    if options == nil then options = cmm.menu_options end
     target.relevant_options = {}
-    for _, option in cmm.menu_options do
+    for _, option in options do
         if is_menu_option_relevant(option, target) then
             if option.on_open and type(option.on_open) == "function" then
                 option.on_open(target, option)
@@ -937,7 +1046,12 @@ cmm.build_relevant_options = function(target)
         end
     end
     --if #relevant_options == 1 then table.insert(relevant_options, cmm.empty_menu_option()) end
-    table.sort(target.relevant_options, function(a,b) return a.priority > b.priority end)
+    table.sort(target.relevant_options, function(a,b)
+        if (a.priority ~= nil or b.priority ~= nil) and a.priority ~= b.priority then
+            return (a.priority or 0) > (b.priority or 0)
+        end
+        return a.name < b.name
+    end)
     cmm.build_option_wedge_points(target)
 end
 
@@ -1171,12 +1285,12 @@ cmm.open_options_menu = function(target)
 end
 
 cmm.close_options_menu = function(target)
-    if state.is_menu_open then
-        cmm.trigger_selected_action(target)
-    end
-    if not target.selected_option then
+    --if state.is_menu_open then
+    --    cmm.trigger_selected_action(target)
+    --end
+    --if not target.selected_option then
         state.is_menu_open = false
-    end
+    --end
 end
 
 cmm.draw_pointer_line = function(target)
@@ -1275,9 +1389,30 @@ end, config.disable_when_armed)
 menus.settings:toggle("Disable In Vehicles", {}, "Only display the menu when on foot, outside of a vehicle", function(value)
     config.disable_in_vehicles = value
 end, config.disable_in_vehicles)
-menus.settings:slider("Open Menu Key", {"cmmopenmenukey"}, "Which input opens the menu. Reference: https://docs.fivem.net/docs/game-references/controls/", 1, 360, config.open_menu_key, 1, function(value)
-    config.open_menu_key = value
+
+menus.settings_controls = menus.settings:list("Controls", {}, "Configure the controls to open, close, and select menu items.")
+menus.settings_controls:hyperlink("Controls Reference", "https://docs.fivem.net/docs/game-references/controls/")
+menus.settings_controls:divider("Keyboard")
+menus.settings_controls:slider("Open Menu", {"cmmkbopenmenukey"}, "Which control input opens the menu.", 1, 360, config.controls.keyboard.open_menu, 1, function(value)
+    config.controls.keyboard.open_menu = value
 end)
+menus.settings_controls:slider("Close Menu", {"cmmkbclosemenukey"}, "Which control input closes the menu.", 1, 360, config.controls.keyboard.close_menu, 1, function(value)
+    config.controls.keyboard.close_menu = value
+end)
+menus.settings_controls:slider("Select Item", {"cmmkbselectmenukey"}, "Which control input selects an item from the menu.", 1, 360, config.controls.keyboard.select_option, 1, function(value)
+    config.controls.keyboard.select_option = value
+end)
+menus.settings_controls:divider("Controller")
+menus.settings_controls:slider("Open Menu", {"cmmconopenmenukey"}, "Which control input opens the menu.", 1, 360, config.controls.controller.open_menu, 1, function(value)
+    config.controls.controller.open_menu = value
+end)
+menus.settings_controls:slider("Close Menu", {"cmmconclosemenukey"}, "Which control input closes the menu.", 1, 360, config.controls.controller.close_menu, 1, function(value)
+    config.controls.controller.close_menu = value
+end)
+menus.settings_controls:slider("Select Item", {"cmmconselectmenukey"}, "Which control input selects an item from the menu.", 1, 360, config.controls.controller.select_option, 1, function(value)
+    config.controls.controller.select_option = value
+end)
+
 menus.settings:toggle("Hot Keys Enabled", {}, "Hotkeys allow for selecting menu options by pressing keyboard keys.", function(value)
     config.hot_keys_enabled = value
 end, config.hot_keys_enabled)
