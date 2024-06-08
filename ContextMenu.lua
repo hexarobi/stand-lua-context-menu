@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.33"
+local SCRIPT_VERSION = "0.33.1"
 
 ---
 --- Auto Updater
@@ -18,21 +18,49 @@ local auto_update_config = {
         "lib/context_menu/item_browser.lua",
         "lib/context_menu/shared_state.lua",
         "lib/context_menu/vehicle_utils.lua",
-        -- ContextMenu Options
-        "lib/ContextMenus/clean.lua",
-        "lib/ContextMenus/copy.lua",
-        "lib/ContextMenus/dance.lua",
-        "lib/ContextMenus/destroy.lua",
+
         "lib/ContextMenus/enter.lua",
-        "lib/ContextMenus/flip.lua",
-        "lib/ContextMenus/freeze.lua",
-        "lib/ContextMenus/paste.lua",
-        "lib/ContextMenus/ped_scenario.lua",
-        "lib/ContextMenus/player_menu.lua",
-        "lib/ContextMenus/repair.lua",
-        "lib/ContextMenus/save.lua",
-        "lib/ContextMenus/spawn.lua",
         "lib/ContextMenus/teleport.lua",
+        "lib/ContextMenus/player_menu.lua",
+
+        "lib/ContextMenus/Edit/_folder.lua",
+        "lib/ContextMenus/Edit/clean.lua",
+        "lib/ContextMenus/Edit/construct.lua",
+        "lib/ContextMenus/Edit/copy.lua",
+        "lib/ContextMenus/Edit/delete.lua",
+        "lib/ContextMenus/Edit/paste.lua",
+        "lib/ContextMenus/Edit/repair.lua",
+        "lib/ContextMenus/Edit/save.lua",
+        "lib/ContextMenus/Edit/save_outfit.lua",
+
+        "lib/ContextMenus/Fun/_folder.lua",
+        "lib/ContextMenus/Fun/cat.lua",
+        "lib/ContextMenus/Fun/dance.lua",
+        "lib/ContextMenus/Fun/flip.lua",
+        "lib/ContextMenus/Fun/ped_scenario.lua",
+
+        "lib/ContextMenus/Spawn/_folder.lua",
+        "lib/ContextMenus/Spawn/construct.lua",
+        "lib/ContextMenus/Spawn/garage.lua",
+        "lib/ContextMenus/Spawn/random_car.lua",
+        "lib/ContextMenus/Spawn/vehicle_class.lua",
+
+        "lib/ContextMenus/Trolling/_folder.lua",
+        "lib/ContextMenus/Trolling/destroy.lua",
+        "lib/ContextMenus/Trolling/freeze.lua",
+
+        -- Old Options
+        --"lib/ContextMenus/clean.lua",
+        --"lib/ContextMenus/copy.lua",
+        --"lib/ContextMenus/dance.lua",
+        --"lib/ContextMenus/destroy.lua",
+        --"lib/ContextMenus/flip.lua",
+        --"lib/ContextMenus/freeze.lua",
+        --"lib/ContextMenus/paste.lua",
+        --"lib/ContextMenus/ped_scenario.lua",
+        --"lib/ContextMenus/repair.lua",
+        --"lib/ContextMenus/save.lua",
+        --"lib/ContextMenus/spawn.lua",
     },
 }
 
