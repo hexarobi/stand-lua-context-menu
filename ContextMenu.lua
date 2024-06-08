@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.32"
+local SCRIPT_VERSION = "0.33"
 
 ---
 --- Auto Updater
@@ -50,6 +50,7 @@ util.require_natives("3095a")
 util.ensure_package_is_installed('lua/inspect')
 local inspect = require("inspect")
 local constants = require("context_menu/constants")
+local item_browser = require("context_menu/item_browser")
 
 -- Constructor lib is required for some commands, so install it from repo if its not already
 util.ensure_package_is_installed('lua/Constructor')
@@ -65,7 +66,7 @@ local config = {
     disable_when_armed=true,
     controls ={
         keyboard={
-            open_menu=177,
+            open_menu=238,
             close_menu=177,
             select_option=176,
         },
@@ -407,6 +408,11 @@ cmm.default_menu_option = function(menu_option)
     if menu_option.id == nil then
         unique_id_counter = unique_id_counter + 1
         menu_option.id = unique_id_counter
+    end
+    if menu_option.items ~= nil then
+        for _, child_item in menu_option.items do
+            cmm.default_menu_option(child_item)
+        end
     end
 end
 
@@ -1168,7 +1174,6 @@ end
 
 cmm.expand_target_position = function(target)
     target.menu_pos = { x=0.5, y=0.5, }
-    cmm.build_relevant_options(target)
     target.screen_pos = { x=0.5, y=0.5, }
     cmm.refresh_screen_pos(target)
 end
@@ -1275,6 +1280,7 @@ end
 
 cmm.open_options_menu = function(target)
     if not state.is_menu_open then
+        cmm.build_relevant_options(target)
         target.selected_option = nil
         target.cursor_pos = { x=0.5, y=0.5, }
         PAD.SET_CURSOR_POSITION(target.cursor_pos.x, target.cursor_pos.y)
@@ -1343,32 +1349,20 @@ end, function()
 end)
 
 ---
---- Menu Options
+--- Menu Options Menu
 ---
 
-menus.menu_options = menu.my_root():list("Menu Options", {}, "Enable or disable specific context menu options.")
-menus.menu_options:action("Open ContextMenus Folder", {}, "Add ContextMenu scripts to this folder", function()
-    util.open_folder(CONTEXT_MENUS_DIR)
-end)
-
-local function build_menu_option_description(menu_option)
-    local text = menu_option.help or ""
-    if menu_option.author then text = text.."\nAuthor: "..menu_option.author end
-    if menu_option.filename then text = text.."\nFilename: "..menu_option.filename end
-    if menu_option.filepath then text = text.."\nFilepath: "..menu_option.filepath end
-    return text
-end
-
-menus.menu_options:divider("Menu Options")
-for _, menu_option in cmm.menu_options do
-    menu_option.menu = menus.menu_options:list(menu_option.name, {"cmmconfig"..menu_option.name}, "Configuration options for this specific menu option")
+local function add_option_to_menu(root_menu, menu_option)
+    if menu_option.menu ~= nil then return root_menu:link(menu_option.menu) end
+    menu_option.menu = root_menu:list(menu_option.name, {}, "")
+    menu_option.menu:divider(menu_option.name)
     menu_option.menu:toggle("Enabled", {}, "Enabled options will show up in menu", function(value)
         menu_option.enabled = value
     end, menu_option.enabled)
-    menu_option.menu:text_input("Hotkey", {"cmmhotkey"..menu_option.name}, "Press this key while the menu is open to select this option", function(value)
+    menu_option.menu:text_input("Hotkey", {"cmmhotkey"..menu_option.item_id}, "Press this key while the menu is open to select this option", function(value)
         menu_option.hotkey = value
     end, menu_option.hotkey or "")
-    menu_option.menu:slider("Priority", {"cmmpriority"..menu_option.name}, "Higher priority options appear higher in the menu order", -1000, 1000, menu_option.priority, 1, function(value)
+    menu_option.menu:slider("Priority", {"cmmpriority"..menu_option.item_id}, "Higher priority options appear higher in the menu order", -1000, 1000, menu_option.priority or 0, 1, function(value)
         menu_option.priority = value
     end)
     -- build_menu_option_description(menu_option)
@@ -1376,7 +1370,21 @@ for _, menu_option in cmm.menu_options do
         menu_option.menu:divider("Config")
         menu_option.config_menu(menu_option.menu)
     end
+
+    return menu_option.menu
 end
+
+local function add_menu_options_menus()
+    local root_item = {
+        name="Menu Options",
+        items=cmm.menu_options,
+        description="Browsable list of all menu options you have installed"
+    }
+    item_browser.browse_item(menu.my_root(), root_item, add_option_to_menu)
+    return root_item.menu
+end
+
+add_menu_options_menus()
 
 ---
 --- Settings Menu
