@@ -15,6 +15,7 @@ local auto_update_config = {
     branch="main",
     dependencies={
         "lib/context_menu/constants.lua",
+        "lib/context_menu/item_browser.lua",
         "lib/context_menu/shared_state.lua",
         "lib/context_menu/vehicle_utils.lua",
         -- ContextMenu Options
