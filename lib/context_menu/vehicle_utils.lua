@@ -1,6 +1,9 @@
 -- Vehicle Utils
 
 local constants = require("context_menu/constants")
+local constructor_lib = require("constructor/constructor_lib")
+local convertor = require("constructor/convertors")
+
 local vehicle_utils = {}
 local CONSTRUCTS_DIR = filesystem.stand_dir() .. 'Constructs\\ContextMenu Saves\\'
 filesystem.mkdirs(CONSTRUCTS_DIR)
@@ -139,6 +142,42 @@ vehicle_utils.apply_favorite_to_current_vehicle = function(pid, vehicle_handle)
         constructor_lib.deserialize_vehicle_attributes(construct)
         return true
     end
+end
+
+
+vehicle_utils.spawn_construct_for_target = function(target)
+    local construct = convertor.load_construct_plan_file(target.selected_option.construct_plan_file)
+    local camera_rotation = CAM.GET_FINAL_RENDERED_CAM_ROT(2)
+    constructor_lib.spawn_construct(construct, target.pos, camera_rotation.z)
+end
+
+vehicle_utils.build_construct_menu_options = function(dir, menu_items)
+    if menu_items == nil then menu_items = {} end
+    for _, filepath in filesystem.list_files(dir) do
+        if filesystem.is_dir(filepath) then
+            local path, dirname = string.match(filepath, "(.-)([^\\/]-%.?)$")
+            local folder_item = {
+                name = dirname,
+                help = "Browse "..dirname,
+                items = vehicle_utils.build_construct_menu_options(filepath)
+            }
+            table.insert(menu_items, folder_item)
+        else
+            local path, filename, ext = string.match(filepath, "(.-)([^\\/]-%.?)[.]([^%.\\/]*)$")
+            local item = {
+                name = filename,
+                help = "Spawn "..filename,
+                execute = vehicle_utils.spawn_construct_for_target,
+                construct_plan_file = {
+                    filename = filename,
+                    filepath = filepath,
+                    ext = ext,
+                },
+            }
+            table.insert(menu_items, item)
+        end
+    end
+    return menu_items
 end
 
 
