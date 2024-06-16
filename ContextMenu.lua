@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.33.1"
+local SCRIPT_VERSION = "0.34"
 
 ---
 --- Auto Updater
@@ -105,6 +105,7 @@ local config = {
             select_option=176,
         },
     },
+    use_right_stick_to_select=true,
     hot_keys_enabled=true,
     use_aarons_model_hash=true,
     wrap_read_model_with_pcall=false,
@@ -131,6 +132,7 @@ local config = {
     color = {
         options_circle={r=1, g=1, b=1, a=0.1},
         option_text={r=1, g=1, b=1, a=1},
+        selected_option_text={r=1, g=0.7, b=1, a=1},
         help_text={r=0.8, g=0.8, b=0.8, a=1},
         option_wedge={r=1, g=1, b=1, a=0.3},
         selected_option_wedge={r=1, g=0, b=1, a=0.3},
@@ -139,7 +141,7 @@ local config = {
         target_bounding_box={r=1,g=0,b=1,a=1},
         line_to_target={ r=1, g=1, b=1, a=0.5},
     },
-    target_ball_size=0.4,
+    target_ball_size=0.15,
     selection_distance=600.0,
     menu_radius=0.15,
     option_label_distance=0.75,
@@ -157,10 +159,10 @@ local config = {
         {name="Ped", value=4, enabled=true},
         {name="Ragdoll", value=8, enabled=true},
         {name="Object", value=16, enabled=true},
-        {name="Pickup", value=32, enabled=true},
+        {name="Pickup", value=32, enabled=false},
         {name="Glass", value=64, enabled=false},
         {name="River", value=128, enabled=false},
-        {name="Foliage", value=256, enabled=true},
+        {name="Foliage", value=256, enabled=false},
     },
     trace_flag_value=0,
 }
@@ -416,7 +418,9 @@ cmm.find_nearest_target = function()
         return result.closest_target
     end
 
-    return cmm.get_raycast_target()
+    if config.trace_flag_value > 0 then
+        return cmm.get_raycast_target()
+    end
 end
 
 ---
@@ -775,11 +779,13 @@ end
 --- Trig Utils
 ---
 
-local function get_circle_coords(origin, radius, angle_degree)
+local function get_circle_coords(origin, radius, angle_degree, aspect_x, aspect_y)
     local angle_radian = math.rad(angle_degree)
+    if aspect_x == nil then aspect_x = 0.9 end
+    if aspect_y == nil then aspect_y = 1.6 end
     return {
-        x=(radius * math.cos(angle_radian) * 0.9) + origin.x,
-        y=(radius * math.sin(angle_radian) * 1.6) + origin.y
+        x=(radius * math.cos(angle_radian) * aspect_x) + origin.x,
+        y=(radius * math.sin(angle_radian) * aspect_y) + origin.y
     }
 end
 
@@ -851,11 +857,15 @@ local function is_angle_between(angle, left, right)
 end
 
 local function get_controls_angle_magnitude()
-    PAD.DISABLE_CONTROL_ACTION(0, 31, false) --x
-    PAD.DISABLE_CONTROL_ACTION(0, 30, false) --y
+    local controls = { x=30, y=31 }
+    if config.use_right_stick_to_select then
+        controls = { x=13, y=12 }
+    end
+    PAD.DISABLE_CONTROL_ACTION(0, controls.x, false) --x
+    PAD.DISABLE_CONTROL_ACTION(0, controls.y, false) --y
     local mouse_movement = {
-        x=PAD.GET_DISABLED_CONTROL_NORMAL(0, 30),
-        y=PAD.GET_DISABLED_CONTROL_NORMAL(0, 31),
+        x=PAD.GET_DISABLED_CONTROL_NORMAL(0, controls.x),
+        y=PAD.GET_DISABLED_CONTROL_NORMAL(0, controls.y),
     }
     local magnitude = math.sqrt(mouse_movement.x ^ 2 + mouse_movement.y ^ 2)
     local angle = normalize_angle(math.deg(math.atan(mouse_movement.y, mouse_movement.x)))
@@ -971,6 +981,18 @@ local function get_option_wedge_draw_color(target, option)
     return draw_color
 end
 
+local function build_option_text_label(option)
+    local option_text = option.name --.. "["..math.floor(option.option_angle + 90).."]"
+    if option.num_relevant_children and option.num_relevant_children > 0 then
+        option_text = option_text.." ("..option.num_relevant_children..")"
+    end
+    return option_text
+end
+
+local function get_option_text_coords(target, option)
+    return get_circle_coords(target.menu_pos, config.menu_radius*config.option_label_distance, option.option_angle)
+end
+
 cmm.draw_options_menu = function(target)
     directx.draw_circle(target.menu_pos.x, target.menu_pos.y, config.menu_radius, config.color.options_circle)
 
@@ -982,12 +1004,8 @@ cmm.draw_options_menu = function(target)
 
     for option_index, option in target.relevant_options do
         if option.name ~= nil then
-            local option_text = option.name
-            if option.num_relevant_children and option.num_relevant_children > 0 then
-                option_text = option_text.." ("..option.num_relevant_children..")"
-            end
-            local option_text_coords = get_circle_coords(target.menu_pos, config.menu_radius*config.option_label_distance, option.option_angle)
-            cmm.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, option_text, 5, 0.5, config.color.option_text, true)
+            local option_text_coords = get_option_text_coords(target, option)
+            cmm.draw_text_with_shadow(option_text_coords.x, option_text_coords.y, build_option_text_label(option), 5, 0.5, config.color.option_text, true)
 
             draw_polygon(option.wedge_points, get_option_wedge_draw_color(target, option))
 
@@ -1002,6 +1020,16 @@ cmm.draw_options_menu = function(target)
             end
         end
     end
+
+    -- Overlay selected text in highlighted color
+    if target.selected_option then
+        local option_text_coords = get_option_text_coords(target, target.selected_option)
+        cmm.draw_text_with_shadow(
+            option_text_coords.x, option_text_coords.y, build_option_text_label(target.selected_option),
+            5, 0.5, config.color.selected_option_text, true
+        )
+    end
+
 end
 
 cmm.draw_target_label = function(target)
@@ -1449,6 +1477,9 @@ end)
 menus.settings_controls:slider("Select Item", {"cmmconselectmenukey"}, "Which control input selects an item from the menu.", 1, 360, config.controls.controller.select_option, 1, function(value)
     config.controls.controller.select_option = value
 end)
+menus.settings_controls:toggle("Use Right-Stick to Select", {}, "When using controller use the right stick, instead of the left, for selecting options.", function(value)
+    config.use_right_stick_to_select = value
+end, config.use_right_stick_to_select)
 
 menus.settings:toggle("Hot Keys Enabled", {}, "Hotkeys allow for selecting menu options by pressing keyboard keys.", function(value)
     config.hot_keys_enabled = value
@@ -1560,6 +1591,16 @@ menu.inline_rainbow(menus.settings_colors:colour("Option Wedge Color", {"cmmcolo
 end))
 menu.inline_rainbow(menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
     config.color.selected_option_wedge = color
+end))
+
+menu.inline_rainbow(menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
+    config.color.selected_option_wedge = color
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Option Text Color", {"cmmcolortextcolor"}, "The option text color", config.color.option_text, true, function(color)
+    config.color.option_text = color
+end))
+menu.inline_rainbow(menus.settings_colors:colour("Selected Option Text Color", {"cmmcolorselectedtextcolor"}, "The currently selected option text color", config.color.selected_option_text, true, function(color)
+    config.color.selected_option_text = color
 end))
 menu.inline_rainbow(menus.settings_colors:colour("Line to Target Color", {"cmmcolortargetcolor"}, "Line from menu to target color", config.color.line_to_target, true, function(color)
     config.color.line_to_target = color
