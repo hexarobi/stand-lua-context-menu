@@ -3,6 +3,7 @@
 local constants = require("context_menu/constants")
 local constructor_lib = require("constructor/constructor_lib")
 local convertor = require("constructor/convertors")
+--local inspect = require("inspect")
 
 local vehicle_utils = {}
 local CONSTRUCTS_DIR = filesystem.stand_dir() .. 'Constructs\\ContextMenu Saves\\'
@@ -57,6 +58,10 @@ vehicle_utils.get_model_hash = function(handle_or_ptr)
     if model_info ~= 0 then
         return memory.read_int(model_info + 0x18)
     end
+end
+
+vehicle_utils.debug_log = function(msg)
+    util.log(msg)
 end
 
 ---
@@ -295,12 +300,31 @@ vehicle_utils.color_rgb_to_hex = function(rgb_color)
 end
 
 vehicle_utils.color_hex_to_rgb = function(hexcode)
+    if type(hexcode) ~= "string" then return end
+    if hexcode[1] == "#" and #hexcode == 7 then
+        hexcode = hexcode:gsub("#", "")
+    end
+    if #hexcode ~= 6 then
+        util.log("Invalid hex code: "..hexcode)
+        return
+    end
     return {
         name="#"..hexcode,
         hex="#"..hexcode,
         r=tonumber(string.sub(hexcode, 1, 2),16),
         g=tonumber(string.sub(hexcode, 3, 4),16),
-        b=tonumber(string.sub(hexcode, 5, 6),16)
+        b=tonumber(string.sub(hexcode, 5, 6),16),
+        a=255,
+    }
+end
+
+vehicle_utils.color_hex_to_vector = function(hexcode)
+    local color = vehicle_utils.color_hex_to_rgb(hexcode)
+    return {
+        r = color.r / 255,
+        g = color.g / 255,
+        b = color.b / 255,
+        a = color.a / 255,
     }
 end
 
