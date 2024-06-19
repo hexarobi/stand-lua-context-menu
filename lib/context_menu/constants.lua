@@ -695,15 +695,23 @@ constants.headlight_color_name_map = {
 }
 
 constants.VEHICLE_COLOR_ALIASES = {
+    white='MatteWhite',
+    blue='UtilBlue',
+    green='UtilGreen',
     black='MetallicBlack',
     yellow='MetallicTaxiYellow',
+    brown='UtilLightBrown',
     olive='MatteOliveDrab',
+    orange='UtilOrange',
+    pink='HotPink',
+    purple='MattePurple',
 }
 
 constants.VEHICLE_COLORS = {
     {
         index=0,
         name="MetallicBlack",
+        friendly_name="Black",
         paint_type=constants.VEHICLE_PAINT_TYPES.METALLIC,
         hex="#0d1116",
         rgb="13, 17, 22",
@@ -1103,6 +1111,7 @@ constants.VEHICLE_COLORS = {
     {
         index=57,
         name="UtilGreen",
+        friendly_name="Green",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#1d5a3f",
         rgb="29, 90, 63 ",
@@ -1243,6 +1252,7 @@ constants.VEHICLE_COLORS = {
     {
         index=77,
         name="UtilBlue",
+        friendly_name="Blue",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#275190",
         rgb="39, 81, 144 ",
@@ -1320,6 +1330,7 @@ constants.VEHICLE_COLORS = {
     {
         index=88,
         name="MetallicTaxiYellow",
+        friendly_name="Yellow",
         paint_type=constants.VEHICLE_PAINT_TYPES.METALLIC,
         hex="#ffcf20",
         rgb="255, 207, 32 ",
@@ -1474,6 +1485,7 @@ constants.VEHICLE_COLORS = {
     {
         index=110,
         name="UtilLightBrown",
+        friendly_name="LightBrown",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#b5a079",
         rgb="181, 160, 121 ",
@@ -1621,6 +1633,7 @@ constants.VEHICLE_COLORS = {
     {
         index=131,
         name="MatteWhite",
+        friendly_name="White",
         paint_type=constants.VEHICLE_PAINT_TYPES.MATTE,
         hex="#fcf9f1",
         rgb="252, 249, 241 ",
@@ -1649,6 +1662,7 @@ constants.VEHICLE_COLORS = {
     {
         index=135,
         name="HotPink",
+        friendly_name="Pink",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#f21f99",
         rgb="242, 31, 153 ",
@@ -1670,6 +1684,7 @@ constants.VEHICLE_COLORS = {
     {
         index=138,
         name="UtilOrange",
+        friendly_name="Orange",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#f6ae20",
         rgb="246, 174, 32 ",
@@ -1677,6 +1692,7 @@ constants.VEHICLE_COLORS = {
     {
         index=139,
         name="UtilGreen",
+        friendly_name="LimeGreen",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#b0ee6e",
         rgb="176, 238, 110 ",
@@ -1684,6 +1700,7 @@ constants.VEHICLE_COLORS = {
     {
         index=140,
         name="UtilBlue",
+        friendly_name="LightBlue",
         paint_type=constants.VEHICLE_PAINT_TYPES.NORMAL,
         hex="#08e9fa",
         rgb="8, 233, 250 ",
@@ -1740,6 +1757,7 @@ constants.VEHICLE_COLORS = {
     {
         index=148,
         name="MattePurple",
+        friendly_name="Purple",
         paint_type=constants.VEHICLE_PAINT_TYPES.MATTE,
         hex="#6b1f7b",
         rgb="107, 31, 123 ",
@@ -1768,6 +1786,7 @@ constants.VEHICLE_COLORS = {
     {
         index=152,
         name="MatteOliveDrab",
+        friendly_name="Olive",
         paint_type=constants.VEHICLE_PAINT_TYPES.MATTE,
         hex="#696748",
         rgb="105, 103, 72 ",
