@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.34"
+local SCRIPT_VERSION = "0.35"
 
 ---
 --- Auto Updater
@@ -28,6 +28,7 @@ local auto_update_config = {
         "lib/ContextMenus/Edit/construct.lua",
         "lib/ContextMenus/Edit/copy.lua",
         "lib/ContextMenus/Edit/delete.lua",
+        "lib/ContextMenus/Edit/paint.lua",
         "lib/ContextMenus/Edit/paste.lua",
         "lib/ContextMenus/Edit/repair.lua",
         "lib/ContextMenus/Edit/save.lua",
@@ -38,6 +39,7 @@ local auto_update_config = {
         "lib/ContextMenus/Fun/dance.lua",
         "lib/ContextMenus/Fun/flip.lua",
         "lib/ContextMenus/Fun/ped_scenario.lua",
+        "lib/ContextMenus/Fun/slingshot.lua",
 
         "lib/ContextMenus/Spawn/_folder.lua",
         "lib/ContextMenus/Spawn/construct.lua",
@@ -967,6 +969,7 @@ end
 
 local function get_option_wedge_draw_color(target, option)
     local draw_color = config.color.option_wedge
+    if option.color ~= nil and option.color.r then draw_color = option.color end
     if target.selected_option == option then
         if target.selected_option.ticks_shown ~= nil then
             if (target.selected_option.ticks_shown/2) % 2 == 0 then
