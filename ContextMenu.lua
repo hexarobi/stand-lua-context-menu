@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.35"
+local SCRIPT_VERSION = "0.36"
 
 ---
 --- Auto Updater
@@ -236,6 +236,7 @@ cmm.context_menu_draw_tick = function()
                 if target.previous_relevant_options then
                     cmm.build_relevant_options(target, target.previous_relevant_options.relevant_options)
                     target.previous_relevant_options = target.previous_relevant_options.parent
+                    target.selected_option = nil
                 else
                     cmm.close_options_menu(target)
                 end
@@ -965,6 +966,7 @@ cmm.execute_selected_action = function(target)
         }
         cmm.build_relevant_options(target, target.selected_option.items)
     end
+    target.selected_option = nil
 end
 
 local function get_option_wedge_draw_color(target, option)
