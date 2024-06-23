@@ -705,6 +705,7 @@ constants.VEHICLE_COLOR_ALIASES = {
     orange='UtilOrange',
     pink='HotPink',
     purple='MattePurple',
+    red='MatteRed',
 }
 
 constants.VEHICLE_COLORS = {
@@ -985,6 +986,7 @@ constants.VEHICLE_COLORS = {
     {
         index=39,
         name="MatteRed",
+        friendly_name="Red",
         paint_type=constants.VEHICLE_PAINT_TYPES.MATTE,
         hex="#cf1f21",
         rgb="207, 31, 33 ",
