@@ -2,7 +2,7 @@
 -- by Hexarobi
 -- with code from Wiri, aarroonn, and Davus
 
-local SCRIPT_VERSION = "0.36"
+local SCRIPT_VERSION = "0.36.1"
 
 ---
 --- Auto Updater
@@ -1594,10 +1594,6 @@ end))
 menu.inline_rainbow(menus.settings_colors:colour("Option Wedge Color", {"cmmcolorwedgecolor"}, "An individual option wedge color", config.color.option_wedge, true, function(color)
     config.color.option_wedge = color
 end))
-menu.inline_rainbow(menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
-    config.color.selected_option_wedge = color
-end))
-
 menu.inline_rainbow(menus.settings_colors:colour("Selected Option Wedge Color", {"cmmcolorselectedwedgecolor"}, "The currently selected option wedge color", config.color.selected_option_wedge, true, function(color)
     config.color.selected_option_wedge = color
 end))
