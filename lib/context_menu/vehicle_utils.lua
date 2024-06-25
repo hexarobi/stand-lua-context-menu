@@ -231,10 +231,14 @@ local function build_random_vehicles()
         if not table.contains(blocked_random_vehicles, vehicle.name) then
             table.insert(vehicle_utils.random_vehicles.all, vehicle.name)
             local class_name = find_class_name(vehicle.class)
-            if vehicle_utils.random_vehicles[class_name] == nil then vehicle_utils.random_vehicles[class_name] = {} end
-            table.insert(vehicle_utils.random_vehicles[class_name], vehicle.name)
-            if not table.contains(non_car_classes, class_name) then
-                table.insert(vehicle_utils.random_vehicles.car, vehicle.name)
+            if class_name == nil then
+                util.log("Class name is nil for vehicle "..vehicle.name)
+            else
+                if vehicle_utils.random_vehicles[class_name] == nil then vehicle_utils.random_vehicles[class_name] = {} end
+                table.insert(vehicle_utils.random_vehicles[class_name], vehicle.name)
+                if not table.contains(non_car_classes, class_name) then
+                    table.insert(vehicle_utils.random_vehicles.car, vehicle.name)
+                end
             end
         end
     end
